@@ -1,0 +1,6 @@
+{
+  "name": "Krishok Bazar (কৃষক বাজার)",
+  "description": "A professional marketplace connecting Bangladeshi farmers directly with customers for fresh, chemical-free products.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,29 @@
+@import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Bengali:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Hind Siliguri", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Noto Sans Bengali", "Georgia", serif;
+  
+  --color-organic-bg: #fdfcf6;
+  --color-organic-olive: #5A5A40;
+  --color-organic-earth: #3d2b1f;
+  --color-organic-clay: #a35d47;
+  --color-organic-fresh: #2e7d32;
+}
+
+@layer base {
+  body {
+    @apply bg-organic-bg text-organic-earth font-sans;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
