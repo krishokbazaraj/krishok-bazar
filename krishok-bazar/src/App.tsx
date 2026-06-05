@@ -64,6 +64,7 @@ import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { initPixels, trackAddToCart, trackInitiateCheckout, trackPurchase, trackSearch } from './lib/pixels';
 import { useIdleTimer } from './hooks/useIdleTimer';
 import OurStoryPage from './components/OurStoryPage';
+import FarmerDashboard from './components/FarmerDashboard';
 
 
 // Default avatars & placeholders
@@ -1218,7 +1219,7 @@ export default function App() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [heroBanners, setHeroBanners] = useState<HeroBanner[]>([]);
   const [offers, setOffers] = useState<PromoOffer[]>([]);
-  const [currentPage, setCurrentPage] = useState<'home' | 'about' | 'blog' | 'verify' | 'app' | 'customer-dashboard' | 'contact'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'about' | 'blog' | 'verify' | 'app' | 'customer-dashboard' | 'contact' | 'farmer-dashboard'>('home');
   const [activeOfferPopGroup, setActiveOfferPopGroup] = useState<PromoOffer | null>(null);
 
   // Selection overlays keys
@@ -3423,6 +3424,41 @@ function cleanFirestoreData(data: any): any {
               />
             </motion.div>
           )}
+          {currentPage === 'farmer-dashboard' && loggedInFarmer && (
+            <motion.div
+              key="farmer-dashboard-key"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.18 }}
+            >
+              <FarmerDashboard
+                farmer={loggedInFarmer}
+                allOrders={orderHistory}
+                allProducts={products}
+                onUpdateFarmer={async (updated) => {
+                  await setDoc(doc(db, 'farmers', String(updated.id)), updated);
+                  setFarmers(prev => prev.map(f => f.id === updated.id ? updated : f));
+                  setLoggedInFarmer(updated);
+                }}
+                onAddProduct={async (p) => {
+                  setProducts(prev => [p, ...prev]);
+                }}
+                onUpdateProduct={async (p) => {
+                  await setDoc(doc(db, 'products', String(p.id)), p);
+                  setProducts(prev => prev.map(x => x.id === p.id ? p : x));
+                }}
+                onDeleteProduct={async (id) => {
+                  setProducts(prev => prev.filter(x => x.id !== id));
+                }}
+                onLogout={() => {
+                  setIsLoggedInFarmer(false);
+                  setLoggedInFarmer(null);
+                  setCurrentPage('home');
+                }}
+              />
+            </motion.div>
+          )}
         </AnimatePresence>
 
       </main>
@@ -4924,6 +4960,9 @@ function cleanFirestoreData(data: any): any {
                           setFEditProducts(shamim.products || '');
                           setFEditAvatar(shamim.avatar || '');
                           setIsLoggedInFarmer(true);
+                          setIsFarmerLoginOpen(false);
+                          setCurrentPage('farmer-dashboard');
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
                           return;
                         }
 
@@ -4975,6 +5014,9 @@ function cleanFirestoreData(data: any): any {
                         setFEditProducts(foundFarmer.products || '');
                         setFEditAvatar(foundFarmer.avatar || '');
                         setIsLoggedInFarmer(true);
+                        setIsFarmerLoginOpen(false);
+                        setCurrentPage('farmer-dashboard');
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
                       }}
                       className="w-full bg-emerald-800 hover:bg-emerald-900 text-white py-3 rounded-xl font-bold text-xs transition-all cursor-pointer"
                     >
