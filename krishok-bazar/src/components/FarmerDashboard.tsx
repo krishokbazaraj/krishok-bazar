@@ -1,17 +1,18 @@
 /**
  * FarmerDashboard — Full Standalone Page Component
  * কৃষক বাজার — কৃষক ড্যাশবোর্ড
- * Features: Video section, Supabase photo upload, stats, products CRUD, real-time orders
+ * Features: Video section, Supabase photo upload, stats, products CRUD, real-time orders,
+ *           real-time WhatsApp notifications via Firestore onSnapshot + Browser Notification API
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   BarChart2, ShoppingBag, Leaf, Video, User, Plus, Trash2,
   Edit, Check, X, Upload, Loader2, Youtube, Camera, Star,
   TrendingUp, Package, Phone, AlertTriangle, ChevronRight,
   PlayCircle, Image as ImageIcon, Save, RefreshCw, Eye,
-  CheckCircle, Clock, Truck
+  CheckCircle, Clock, Truck, Bell, BellRing, MessageCircle
 } from 'lucide-react';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, query, where } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
@@ -77,6 +78,20 @@ interface FarmerVideo {
   createdAt: string;
 }
 
+interface FarmerNotification {
+  id: string;
+  farmerId: number;
+  orderId: string;
+  items: string;
+  total: number;
+  customerName: string;
+  customerPhone: string;
+  customerAddress: string;
+  status: string;
+  seen: boolean;
+  createdAt: string;
+}
+
 interface Props {
   farmer: Farmer;
   allOrders: Order[];
@@ -119,6 +134,73 @@ export default function FarmerDashboard({
   const totalOrders = myOrders.length;
   const pendingOrders = myOrders.filter(o => o.status === 'pending' || o.status === 'confirmed').length;
   const completedOrders = myOrders.filter(o => o.status === 'delivered' || o.status === 'completed').length;
+
+  // ── Notifications — Firestore real-time ───────────────────
+  const [notifications, setNotifications] = useState<FarmerNotification[]>([]);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
+  const [toastNotif, setToastNotif] = useState<FarmerNotification | null>(null);
+  const prevNotifCount = useRef(0);
+
+  // Request browser notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // Real-time listener: farmer_notifications where farmerId == this farmer
+  useEffect(() => {
+    const q = query(
+      collection(db, 'farmer_notifications'),
+      where('farmerId', '==', farmer.id)
+    );
+    const unsub = onSnapshot(q, snap => {
+      const docs = snap.docs.map(d => ({ ...d.data() } as FarmerNotification))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      setNotifications(docs);
+
+      // Detect genuinely new unseen notifications (not just first load)
+      const unseenCount = docs.filter(n => !n.seen).length;
+      if (prevNotifCount.current > 0 && unseenCount > prevNotifCount.current) {
+        const newest = docs.find(n => !n.seen);
+        if (newest) {
+          // Show in-app toast
+          setToastNotif(newest);
+          setTimeout(() => setToastNotif(null), 7000);
+
+          // Browser push notification
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('🌾 কৃষক বাজার — নতুন অর্ডার!', {
+              body: `অর্ডার: ${newest.items} | মূল্য: ৳${newest.total}`,
+              icon: 'https://cdn.shopify.com/s/files/1/0991/0717/6761/files/Gemini_Generated_Image_k0x5bek0x5bek0x5.png',
+              tag: newest.id,
+            });
+          }
+        }
+      }
+      prevNotifCount.current = unseenCount;
+    });
+    return () => unsub();
+  }, [farmer.id]);
+
+  const unseenCount = notifications.filter(n => !n.seen).length;
+
+  const markNotifSeen = async (notifId: string) => {
+    await updateDoc(doc(db, 'farmer_notifications', notifId), { seen: true });
+  };
+
+  const markAllSeen = async () => {
+    const unseen = notifications.filter(n => !n.seen);
+    await Promise.all(unseen.map(n => updateDoc(doc(db, 'farmer_notifications', n.id), { seen: true })));
+  };
+
+  const openFarmerWhatsApp = (notif: FarmerNotification) => {
+    const farmerPhone = farmer.phone?.replace(/[^0-9]/g, '') || '';
+    if (!farmerPhone) return;
+    const waPhone = farmerPhone.startsWith('88') ? farmerPhone : `88${farmerPhone}`;
+    const msg = `🌾 *কৃষক বাজার — অর্ডার ${notif.orderId}*\nপণ্য: ${notif.items}\nমূল্য: ৳${notif.total}\nক্রেতা: ${notif.customerName} · ${notif.customerPhone}`;
+    window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+  };
 
   // ── Videos — Firestore live ────────────────────────────────
   const [videos, setVideos] = useState<FarmerVideo[]>([]);
@@ -358,6 +440,23 @@ export default function FarmerDashboard({
           <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${farmer.verified ? 'bg-amber-400 text-stone-900' : 'bg-stone-700 text-stone-200'}`}>
             {farmer.verified ? '👑 গোল্ড' : '⌛ ফ্রি'}
           </span>
+
+          {/* 🔔 Notification Bell */}
+          <button
+            onClick={() => { setShowNotifPanel(p => !p); if (unseenCount > 0) markAllSeen(); }}
+            className="relative p-2 bg-white/10 hover:bg-white/20 rounded-lg transition cursor-pointer"
+            title="নোটিফিকেশন"
+          >
+            {unseenCount > 0
+              ? <BellRing size={16} className="text-amber-300 animate-bounce" />
+              : <Bell size={16} className="text-white/70" />}
+            {unseenCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-emerald-800">
+                {unseenCount}
+              </span>
+            )}
+          </button>
+
           <button
             onClick={onLogout}
             className="text-[10px] font-bold bg-emerald-900 hover:bg-emerald-950 px-3 py-1.5 rounded-lg transition cursor-pointer"
@@ -373,6 +472,119 @@ export default function FarmerDashboard({
           <div className="h-full bg-emerald-500 transition-all" style={{ width: `${uploadPct}%` }} />
         </div>
       )}
+
+      {/* ── 🔔 Floating toast: new order arrived ─────────────── */}
+      <AnimatePresence>
+        {toastNotif && (
+          <motion.div
+            initial={{ opacity: 0, y: -60, scale: 0.92 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -40, scale: 0.92 }}
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] w-[340px] max-w-[95vw]"
+          >
+            <div className="bg-white rounded-2xl shadow-2xl border-2 border-emerald-500 overflow-hidden">
+              <div className="bg-emerald-700 px-4 py-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-white font-bold text-xs">
+                  <BellRing size={14} className="animate-bounce" />
+                  🌾 নতুন অর্ডার পাওয়া গেছে!
+                </div>
+                <button onClick={() => setToastNotif(null)} className="text-white/70 hover:text-white cursor-pointer"><X size={14} /></button>
+              </div>
+              <div className="p-4 space-y-2">
+                <div className="text-xs font-bold text-stone-800">অর্ডার আইডি: <span className="font-mono text-emerald-700">{toastNotif.orderId}</span></div>
+                <div className="text-xs text-stone-600">📦 {toastNotif.items}</div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-black text-emerald-800">৳{toastNotif.total}</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setActiveTab('orders'); setToastNotif(null); }}
+                      className="bg-emerald-800 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg cursor-pointer hover:bg-emerald-900"
+                    >
+                      অর্ডার দেখুন
+                    </button>
+                    {toastNotif.customerPhone && (
+                      <a
+                        href={`https://wa.me/88${toastNotif.customerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`সালাম, আমি কৃষক বাজারের ${farmer.name}। আপনার অর্ডার ${toastNotif.orderId} পেয়েছি।`)}`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="bg-[#25D366] text-white text-[10px] font-bold px-3 py-1.5 rounded-lg cursor-pointer flex items-center gap-1"
+                      >
+                        <MessageCircle size={11} /> WhatsApp
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── 🔔 Notification side panel ───────────────────────── */}
+      <AnimatePresence>
+        {showNotifPanel && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/30 z-[150]"
+              onClick={() => setShowNotifPanel(false)}
+            />
+            <motion.div
+              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="fixed top-0 right-0 h-full w-80 max-w-[95vw] bg-white shadow-2xl z-[160] flex flex-col"
+            >
+              <div className="bg-emerald-800 text-white px-4 py-3 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  <Bell size={15} /> নোটিফিকেশনস ({notifications.length})
+                </div>
+                <button onClick={() => setShowNotifPanel(false)} className="text-white/70 hover:text-white cursor-pointer"><X size={16} /></button>
+              </div>
+
+              {notifications.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-stone-400 gap-2">
+                  <Bell size={32} className="opacity-20" />
+                  <p className="text-sm font-bold">কোনো নোটিফিকেশন নেই</p>
+                  <p className="text-xs text-center px-4">অর্ডার আসলে এখানে লাইভ দেখা যাবে</p>
+                </div>
+              ) : (
+                <div className="flex-1 overflow-y-auto divide-y divide-stone-100">
+                  {notifications.map(notif => (
+                    <div
+                      key={notif.id}
+                      onClick={() => markNotifSeen(notif.id)}
+                      className={`p-4 cursor-pointer hover:bg-stone-50 transition ${!notif.seen ? 'bg-emerald-50 border-l-4 border-emerald-500' : ''}`}
+                    >
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[10px] font-mono font-bold text-emerald-700">{notif.orderId}</div>
+                          <div className="text-xs font-bold text-stone-800 mt-0.5 line-clamp-2">{notif.items}</div>
+                          <div className="text-sm font-black text-emerald-800 mt-1">৳{notif.total}</div>
+                          <div className="text-[10px] text-stone-500 mt-0.5">ক্রেতা: {notif.customerName}</div>
+                          <div className="text-[10px] text-stone-400">{new Date(notif.createdAt).toLocaleString('bn-BD')}</div>
+                        </div>
+                        {!notif.seen && (
+                          <span className="shrink-0 w-2 h-2 bg-emerald-500 rounded-full mt-1" />
+                        )}
+                      </div>
+                      {/* WhatsApp quick-reply */}
+                      {notif.customerPhone && farmer.verified && (
+                        <a
+                          href={`https://wa.me/88${notif.customerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`সালাম ${notif.customerName}, আমি কৃষক বাজারের ${farmer.name}। আপনার অর্ডার ${notif.orderId} পেয়েছি।`)}`}
+                          target="_blank" rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="mt-2 inline-flex items-center gap-1.5 bg-[#25D366] text-white text-[9px] font-bold px-2.5 py-1 rounded-lg cursor-pointer"
+                        >
+                          <MessageCircle size={10} /> ক্রেতাকে WhatsApp করুন
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* ── Tab bar ────────────────────────────────────────── */}
       <div className="bg-white border-b border-stone-200 px-4 flex gap-1 overflow-x-auto no-scrollbar sticky top-0 z-10 shadow-sm">

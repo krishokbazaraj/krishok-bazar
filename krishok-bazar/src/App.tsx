@@ -2301,6 +2301,54 @@ function cleanFirestoreData(data: any): any {
           premiumOptionsSelected 
         })
       }).catch(err => console.error('Could not notify admin by email', err));
+
+      // ── Real-time Farmer WhatsApp Notifications ───────────────────
+      // Build a map of unique farmers from cart items
+      const farmerMap = new Map<number, { name: string; phone: string; items: CartItem[] }>();
+      for (const item of cart) {
+        if (!item.farmerId) continue;
+        const farmerRecord = farmers.find(f => f.id === item.farmerId || f.name === item.farmer);
+        const phone = farmerRecord?.phone || '';
+        if (!farmerMap.has(item.farmerId)) {
+          farmerMap.set(item.farmerId, { name: item.farmer, phone, items: [] });
+        }
+        farmerMap.get(item.farmerId)!.items.push(item);
+      }
+
+      // For each farmer: write Firestore notification + open WhatsApp with staggered delay
+      let waDelay = 1200;
+      for (const [farmerId, farmerData] of farmerMap.entries()) {
+        const notifId = `notif_${farmerId}_${freshOrderId}`;
+        const farmerItemsText = farmerData.items.map(i => `${i.title} ×${i.quantity}`).join(', ');
+        const farmerTotal = farmerData.items.reduce((s, i) => s + i.price * i.quantity, 0);
+
+        // Write notification to Firestore (farmer dashboard reads this live via onSnapshot)
+        setDoc(doc(db, 'farmer_notifications', notifId), {
+          id: notifId,
+          farmerId,
+          farmerName: farmerData.name,
+          orderId: freshOrderId,
+          items: farmerItemsText,
+          total: farmerTotal,
+          customerName: details.name,
+          customerPhone: details.phone,
+          customerAddress: details.address,
+          status: 'pending',
+          seen: false,
+          createdAt: new Date().toISOString(),
+        }).catch(err => console.error('Farmer notification write failed:', err));
+
+        // Open WhatsApp to farmer's phone with pre-filled order message
+        if (farmerData.phone) {
+          const cleanPhone = farmerData.phone.replace(/[^0-9]/g, '');
+          const waPhone = cleanPhone.startsWith('88') ? cleanPhone : `88${cleanPhone}`;
+          const farmerMsg = `🌾 *কৃষক বাজার — নতুন অর্ডার!*\n\n*অর্ডার আইডি:* ${freshOrderId}\n*আপনার পণ্য:* ${farmerItemsText}\n*আপনার প্রাপ্য মূল্য:* ৳${farmerTotal}\n\n👤 *ক্রেতার তথ্য:*\n• নাম: ${details.name}\n• ফোন: ${details.phone}\n• ঠিকানা: ${details.address}\n\n⚡ অনুগ্রহ করে দ্রুত পণ্য প্রস্তুত রাখুন। ধন্যবাদ!`;
+          setTimeout(() => {
+            window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(farmerMsg)}`, '_blank');
+          }, waDelay);
+          waDelay += 1500;
+        }
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, `orders/${freshOrderId}`);
     }
