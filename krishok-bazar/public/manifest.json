@@ -1,22 +1,65 @@
 {
-  "name": "Krishok Bazar (কৃষক বাজার)",
-  "short_name": "KrishokBazar",
-  "description": "Professional Direct Farmer-to-Kitchen Agricultural Marketplace in Bangladesh",
+  "name": "কৃষক বাজার — Krishok Bazar",
+  "short_name": "কৃষক বাজার",
+  "description": "দালাল মুক্ত সরাসরি কৃষক-থেকে-রান্নাঘর আধুনিক কৃষি বাজার। Direct Farmer-to-Kitchen Marketplace Bangladesh.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
   "orientation": "any",
   "theme_color": "#1B5E20",
   "background_color": "#ffffff",
+  "lang": "bn",
+  "dir": "ltr",
+  "categories": ["shopping", "food", "lifestyle"],
+  "id": "krishok-bazar-pwa",
   "icons": [
     {
-      "src": "https://img.icons8.com/color/192/000000/sprout.png",
+      "src": "https://cdn.shopify.com/s/files/1/0991/0717/6761/files/Gemini_Generated_Image_k0x5bek0x5bek0x5.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "https://img.icons8.com/color/512/000000/sprout.png",
+      "src": "https://cdn.shopify.com/s/files/1/0991/0717/6761/files/Gemini_Generated_Image_k0x5bek0x5bek0x5.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://cdn.shopify.com/s/files/1/0991/0717/6761/files/Gemini_Generated_Image_k0x5bek0x5bek0x5.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
     }
-  ]
+  ],
+  "screenshots": [
+    {
+      "src": "https://cdn.shopify.com/s/files/1/0991/0717/6761/files/Gemini_Generated_Image_k0x5bek0x5bek0x5.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "label": "কৃষক বাজার হোম স্ক্রিন"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "পণ্য দেখুন",
+      "short_name": "পণ্য",
+      "description": "সর্বশেষ তাজা সবজি ও ফসলের তালিকা",
+      "url": "/#products",
+      "icons": [{ "src": "https://cdn.shopify.com/s/files/1/0991/0717/6761/files/Gemini_Generated_Image_k0x5bek0x5bek0x5.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "কার্ট ও অর্ডার",
+      "short_name": "অর্ডার",
+      "description": "আপনার কেনাকাটার কার্ট ও অর্ডার ইতিহাস",
+      "url": "/#cart",
+      "icons": [{ "src": "https://cdn.shopify.com/s/files/1/0991/0717/6761/files/Gemini_Generated_Image_k0x5bek0x5bek0x5.png", "sizes": "96x96" }]
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false,
+  "edge_side_panel": {
+    "preferred_width": 400
+  }
 }

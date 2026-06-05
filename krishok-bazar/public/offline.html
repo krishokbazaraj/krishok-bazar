@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="bn" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>অফলাইন — কৃষক বাজার</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(135deg, #064e3b 0%, #1b4332 50%, #065f46 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      padding: 20px;
+    }
+    .card {
+      background: rgba(255,255,255,0.08);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 24px;
+      padding: 48px 40px;
+      max-width: 420px;
+      width: 100%;
+      text-align: center;
+    }
+    .logo {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      object-fit: cover;
+      margin: 0 auto 24px;
+      border: 3px solid rgba(255,255,255,0.3);
+      display: block;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 900;
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+    .sub {
+      font-size: 13px;
+      opacity: 0.75;
+      margin-bottom: 32px;
+      line-height: 1.6;
+    }
+    .icon { font-size: 48px; display: block; margin-bottom: 20px; }
+    .retry-btn {
+      background: #25D366;
+      color: white;
+      border: none;
+      padding: 14px 32px;
+      border-radius: 14px;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      width: 100%;
+      margin-bottom: 12px;
+      transition: transform 0.15s, opacity 0.15s;
+    }
+    .retry-btn:hover { opacity: 0.9; transform: scale(1.02); }
+    .wa-btn {
+      display: block;
+      background: rgba(255,255,255,0.1);
+      color: white;
+      text-decoration: none;
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 12px 24px;
+      border-radius: 14px;
+      font-size: 13px;
+      font-weight: 700;
+      margin-top: 12px;
+      transition: background 0.2s;
+    }
+    .wa-btn:hover { background: rgba(255,255,255,0.2); }
+    .status {
+      margin-top: 24px;
+      font-size: 11px;
+      opacity: 0.5;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img 
+      src="https://cdn.shopify.com/s/files/1/0991/0717/6761/files/Gemini_Generated_Image_k0x5bek0x5bek0x5.png" 
+      alt="কৃষক বাজার লোগো" 
+      class="logo"
+      onerror="this.style.display='none'"
+    />
+    <span class="icon">📵</span>
+    <h1>ইন্টারনেট সংযোগ নেই</h1>
+    <p class="sub">
+      আপনি এই মুহূর্তে অফলাইনে আছেন।<br/>
+      ইন্টারনেট সংযোগ চালু করে পুনরায় চেষ্টা করুন।<br/><br/>
+      <strong>কৃষক বাজার</strong> — দালাল মুক্ত তাজা বাজার 🌾
+    </p>
+    <button class="retry-btn" onclick="window.location.reload()">
+      🔄 পুনরায় লোড করুন
+    </button>
+    <a class="wa-btn" href="https://wa.me/8801931355398?text=কৃষক+বাজার+থেকে+অর্ডার+করতে+চাই">
+      💬 WhatsApp-এ অর্ডার করুন
+    </a>
+    <p class="status">Offline Mode — কৃষক বাজার PWA v2.0</p>
+  </div>
+  <script>
+    window.addEventListener('online', () => window.location.reload());
+  </script>
+</body>
+</html>
