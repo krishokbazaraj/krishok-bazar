@@ -26,20 +26,15 @@ service cloud.firestore {
     
     // -------- CUSTOMERS COLLECTION --------
     match /customers/{customerId} {
-      allow read: if isSignedIn() && request.auth.uid == customerId;
-      allow create: if isSignedIn() && request.auth.uid == customerId && isValidCustomer(request.resource.data);
-      allow update: if isSignedIn() && request.auth.uid == customerId && isValidCustomer(request.resource.data);
-      allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == customerId);
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == customerId);
+      allow create, update: if isValidCustomer(request.resource.data);
+      allow delete: if isAdmin();
     }
     
     function isValidCustomer(data) {
-      return data.keys().hasAll(['name', 'phone', 'address', 'uid', 'createdAt']) &&
-             data.keys().size() == 5 &&
-             data.name is string && data.name.size() <= 150 &&
-             data.phone is string && data.phone.size() <= 50 &&
-             data.address is string && data.address.size() <= 500 &&
-             data.uid is string && data.uid == request.auth.uid &&
-             data.createdAt is string && data.createdAt.size() <= 50;
+      return data.name is string && data.name.size() <= 150 &&
+             data.phone is string && data.phone.size() <= 100 &&
+             data.address is string && data.address.size() <= 1000;
     }
     
     // -------- PRODUCTS COLLECTION --------
@@ -56,12 +51,12 @@ service cloud.firestore {
              data.id is int &&
              data.title is string && data.title.size() <= 200 &&
              data.slug is string && data.slug.size() <= 200 &&
-             data.price is int && data.price >= 0 &&
+             (data.price is int || data.price is float) && data.price >= 0 &&
              data.unit is string && data.unit.size() <= 50 &&
              data.cat is string && data.cat.size() <= 50 &&
              data.farmer is string && data.farmer.size() <= 100 &&
              data.farmerId is int &&
-             data.img is string && data.img.size() <= 2000;
+             data.img is string;
     }
     
     // -------- FARMERS COLLECTION --------
@@ -127,6 +122,70 @@ service cloud.firestore {
              (data.shippingCost is float || data.shippingCost is int) && data.shippingCost >= 0 &&
              data.date is string && data.date.size() <= 100 &&
              data.status is string && (data.status in ['pending', 'confirmed', 'packed', 'shipped', 'out_for_delivery', 'delivered', 'completed']);
+    }
+
+    // -------- HERO BANNERS COLLECTION --------
+    match /hero_banners/{bannerId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // -------- OFFERS COLLECTION --------
+    match /offers/{offerId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // -------- SITE CONTENT COLLECTION --------
+    match /site_content/{contentId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // -------- FARMER POSTS COLLECTION --------
+    match /farmer_posts/{postId} {
+      allow read: if true; // Publicly readable feed
+      allow create: if isValidFarmerPost(request.resource.data);
+      allow update: if true; // Allow client-side likes, comments, and edits
+      allow delete: if true; // Allow farmers to delete their posts
+    }
+    
+    function isValidFarmerPost(data) {
+      return data.keys().hasAll(['farmerId', 'farmerName', 'farmerAvatar', 'body', 'timestamp', 'likes', 'comments']) &&
+             data.farmerId is int &&
+             data.farmerName is string && data.farmerName.size() <= 200 &&
+             data.body is string && data.body.size() <= 8000 &&
+             data.timestamp is string && data.timestamp.size() <= 100 &&
+             data.likes is int && data.likes >= 0 &&
+             data.comments is list;
+    }
+
+    // -------- REVIEWS COLLECTION --------
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create, update: if isAdmin() || isValidReview(request.resource.data);
+      allow delete: if isAdmin();
+    }
+    
+    function isValidReview(data) {
+      return data.keys().hasAll(['id', 'user', 'loc', 'rating', 'date', 'text']) &&
+             (data.id is int || data.id is float) &&
+             data.user is string && data.user.size() <= 150 &&
+             data.loc is string && data.loc.size() <= 150 &&
+             (data.rating is int || data.rating is float) &&
+             data.date is string && data.date.size() <= 100 &&
+             data.text is string && data.text.size() <= 8000;
+    }
+
+    // -------- SUBSCRIPTIONS COLLECTION --------
+    match /subscriptions/{subId} {
+      allow read: if isAdmin();
+      allow create, update: if isValidSubscription(request.resource.data);
+      allow delete: if isAdmin();
+    }
+    
+    function isValidSubscription(data) {
+      return data.status is string && data.status.size() <= 100;
     }
   }
 }

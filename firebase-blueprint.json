@@ -81,6 +81,38 @@
         "status": { "type": "string", "enum": ["pending", "confirmed", "delivered", "completed"] }
       },
       "required": ["id", "items", "total", "customerName", "customerPhone", "customerAddress", "customerEmail", "deliveryArea", "shippingCost", "date", "status"]
+    },
+    "FarmerPost": {
+      "title": "FarmerPost",
+      "description": "A social post shared by a farmer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "farmerId": { "type": "number" },
+        "farmerName": { "type": "string" },
+        "farmerAvatar": { "type": "string" },
+        "body": { "type": "string" },
+        "img": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "likes": { "type": "number" },
+        "likedBy": { "type": "array" },
+        "comments": { "type": "array" }
+      },
+      "required": ["farmerId", "farmerName", "body", "timestamp", "likes"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "A user-submitted rating and testimonial",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "user": { "type": "string" },
+        "loc": { "type": "string" },
+        "rating": { "type": "number" },
+        "date": { "type": "string" },
+        "text": { "type": "string" }
+      },
+      "required": ["id", "user", "loc", "rating", "date", "text"]
     }
   },
   "firestore": {
@@ -103,6 +135,14 @@
     "/orders/{orderId}": {
       "schema": "Order",
       "description": "Unbiased client order placements"
+    },
+    "/farmer_posts/{postId}": {
+      "schema": "FarmerPost",
+      "description": "Community posts from farmers with likes and comments from users"
+    },
+    "/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Customer reviews and ratings"
     }
   }
 }

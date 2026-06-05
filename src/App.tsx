@@ -1477,6 +1477,7 @@ export default function App() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [heroBanners, setHeroBanners] = useState<HeroBanner[]>([]);
   const [offers, setOffers] = useState<PromoOffer[]>([]);
+  const [farmerPosts, setFarmerPosts] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState<'home' | 'about' | 'blog' | 'verify' | 'app' | 'customer-dashboard' | 'contact'>('home');
   const [activeOfferPopGroup, setActiveOfferPopGroup] = useState<PromoOffer | null>(null);
   const [activeAd, setActiveAd] = useState<ElegantAd | null>(null);
@@ -1517,9 +1518,19 @@ export default function App() {
     };
   });
 
-  const saveAboutUsData = (updated: any) => {
-    setAboutUsData(updated);
-    localStorage.setItem('krishok_about_us_data', JSON.stringify(updated));
+  const saveAboutUsData = async (updated: any) => {
+    setAboutUsData((prev: any) => {
+      const next = { ...prev };
+      Object.keys(updated).forEach(key => {
+        if (updated[key] !== next[key]) {
+          next[key] = updated[key];
+        }
+      });
+      localStorage.setItem('krishok_about_us_data', JSON.stringify(next));
+      setDoc(doc(db, 'site_content', 'about_us'), next)
+        .catch(err => handleFirestoreError(err, OperationType.WRITE, 'site_content/about_us'));
+      return next;
+    });
   };
 
   const [blogPosts, setBlogPosts] = useState<any[]>(() => {
@@ -1555,9 +1566,17 @@ export default function App() {
     ];
   });
 
-  const saveBlogPosts = (updated: any[]) => {
-    setBlogPosts(updated);
-    localStorage.setItem('krishok_blog_posts', JSON.stringify(updated));
+  const saveBlogPosts = async (updated: any[]) => {
+    setBlogPosts((prev: any[]) => {
+      const next = prev.map(p => {
+        const matchingUpdated = updated.find(u => u.id === p.id);
+        return matchingUpdated || p;
+      });
+      localStorage.setItem('krishok_blog_posts', JSON.stringify(next));
+      setDoc(doc(db, 'site_content', 'blog_posts'), { posts: next })
+        .catch(err => handleFirestoreError(err, OperationType.WRITE, 'site_content/blog_posts'));
+      return next;
+    });
   };
 
   const [categoriesList, setCategoriesList] = useState<any[]>(() => {
@@ -1579,9 +1598,14 @@ export default function App() {
     ];
   });
 
-  const saveCustomCategories = (updated: any[]) => {
+  const saveCustomCategories = async (updated: any[]) => {
     setCategoriesList(updated);
     localStorage.setItem('custom_categories', JSON.stringify(updated));
+    try {
+      await setDoc(doc(db, 'site_content', 'custom_categories'), { list: updated });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'site_content/custom_categories');
+    }
   };
 
   const isAdmin = currentView === 'admin' || sessionStorage.getItem('admin_session') === 'active_session';
@@ -1649,6 +1673,21 @@ export default function App() {
   const [broadcastMsg, setBroadcastMsg] = useState<string>(() => {
     return localStorage.getItem('krishok_broadcast_msg') || '📢 নিরাপদ খাদ্য ক্যাম্পেইন: প্রিমিয়াম মেম্বারদের জন্য সতেরো রকমের রেডি-টু-কুক কাটা সবজি ও ম্যারিনেট করা মুরগির মাংসের স্পেশাল হোম ডেলিভারি শুরু হয়েছে!';
   });
+  const broadcastTimeoutRef = useRef<any>(null);
+  const saveBroadcastMsg = (msg: string) => {
+    setBroadcastMsg(msg);
+    localStorage.setItem('krishok_broadcast_msg', msg);
+    if (broadcastTimeoutRef.current) {
+      clearTimeout(broadcastTimeoutRef.current);
+    }
+    broadcastTimeoutRef.current = setTimeout(async () => {
+      try {
+        await setDoc(doc(db, 'site_content', 'broadcast_msg'), { msg });
+      } catch (err) {
+        console.error('Error saving broadcast msg to Firestore:', err);
+      }
+    }, 1000);
+  };
 
   // Cart & Orders
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -1662,7 +1701,7 @@ export default function App() {
   const [pass, setPass] = useState('');
   
   // Tab & functional state within the Farmer Dashboard
-  const [farmerActiveTab, setFarmerActiveTab] = useState<'orders' | 'add_product' | 'edit_profile' | 'upgrade'>('orders');
+  const [farmerActiveTab, setFarmerActiveTab] = useState<'orders' | 'add_product' | 'posts_videos' | 'edit_profile' | 'upgrade'>('orders');
   
   // Farmer custom crop upload states
   const [fNewProdTitle, setFNewProdTitle] = useState('');
@@ -1688,6 +1727,12 @@ export default function App() {
   const [fUpgradeSender, setFUpgradeSender] = useState('');
   const [fUpgradeTxnId, setFUpgradeTxnId] = useState('');
   const [fUpgradeMethod, setFUpgradeMethod] = useState<'bKash' | 'Nagad'>('bKash');
+
+  // Farmer social posting states
+  const [fPostText, setFPostText] = useState('');
+  const [fPostImg, setFPostImg] = useState('');
+  const [fVideoTitle, setFVideoTitle] = useState('');
+  const [fVideoUrl, setFVideoUrl] = useState('');
   
   // New Farmer application details
   const [farmerRegName, setFarmerRegName] = useState('');
@@ -2225,6 +2270,75 @@ export default function App() {
       handleFirestoreError(error, OperationType.LIST, 'offers');
     });
 
+    const unsubSiteContent = onSnapshot(collection(db, 'site_content'), (snapshot) => {
+      snapshot.forEach(doc => {
+        const id = doc.id;
+        const data = doc.data();
+        if (id === 'about_us') {
+          setAboutUsData(data);
+          localStorage.setItem('krishok_about_us_data', JSON.stringify(data));
+        } else if (id === 'blog_posts') {
+          if (Array.isArray(data.posts)) {
+            setBlogPosts(data.posts);
+            localStorage.setItem('krishok_blog_posts', JSON.stringify(data.posts));
+          }
+        } else if (id === 'broadcast_msg') {
+          if (typeof data.msg === 'string') {
+            setBroadcastMsg(data.msg);
+            localStorage.setItem('krishok_broadcast_msg', data.msg);
+          }
+        } else if (id === 'custom_categories') {
+          if (Array.isArray(data.list)) {
+            setCategoriesList(data.list);
+            localStorage.setItem('custom_categories', JSON.stringify(data.list));
+          }
+        }
+      });
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'site_content');
+    });
+
+    const INITIAL_FARMER_POSTS = [
+      {
+        id: 'post_1',
+        farmerId: 1,
+        farmerName: 'করিম মিয়া',
+        farmerAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=120',
+        body: 'আজ বগুড়া হাব থেকে আমাদের স্পেশাল লাল মরিচ তোলা হচ্ছে। কোনো প্রকার কেমিক্যাল স্প্রে করা হয়নি, রোদেই শুকানো হচ্ছে। খাঁটি লাল মরিচের গুঁড়া পেতে অর্ডার করতে পারেন!',
+        img: 'https://images.unsplash.com/photo-1598514983318-29141990e9d6?auto=format&fit=crop&q=80&w=600',
+        timestamp: new Date().toISOString(),
+        likes: 12,
+        comments: [
+          { userName: 'হাসান চৌধুরী', text: '২ কেজি মরিচের গুঁড়া লাগবে ভাই, কিভাবে পাবো?', timestamp: new Date().toISOString() }
+        ]
+      },
+      {
+        id: 'post_2',
+        farmerId: 2,
+        farmerName: 'রহিমা বেগম',
+        farmerAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=120',
+        body: 'আমাদের বাগানের তাজা কাঁচকলা আলহামদুলিল্লাহ আজকে কাটা হয়েছে। যশোরের মিষ্টি মাটির স্বাদ পাবেন এই কলার তরকারিতে!',
+        img: 'https://images.unsplash.com/photo-1566393028639-d108a42c46a7?auto=format&fit=crop&q=80&w=600',
+        timestamp: new Date(Date.now() - 3600000).toISOString(),
+        likes: 8,
+        comments: []
+      }
+    ];
+
+    const unsubFarmerPosts = onSnapshot(collection(db, 'farmer_posts'), (snapshot) => {
+      if (!snapshot.empty) {
+        const list: any[] = [];
+        snapshot.forEach(doc => {
+          list.push({ id: doc.id, ...doc.data() });
+        });
+        setFarmerPosts(list.sort((a, b) => b.timestamp.localeCompare(a.timestamp)));
+      } else {
+        setFarmerPosts(INITIAL_FARMER_POSTS);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'farmer_posts');
+    });
+
     // Hash handler for secure admin path routing
     const checkHash = () => {
       const hash = window.location.hash;
@@ -2245,6 +2359,8 @@ export default function App() {
       unsubReviews();
       unsubBanners();
       unsubOffers();
+      unsubSiteContent();
+      unsubFarmerPosts();
       window.removeEventListener('hashchange', checkHash);
     };
   }, []);
@@ -2667,7 +2783,7 @@ function cleanFirestoreData(data: any): any {
         videos={videos.length > 0 ? videos : INITIAL_VIDEOS}
         setVideos={setDbVideos}
         broadcastMsg={broadcastMsg}
-        setBroadcastMsg={setBroadcastMsg}
+        setBroadcastMsg={saveBroadcastMsg}
         heroBanners={heroBanners}
         setHeroBanners={setDbHeroBanners}
       />
@@ -3406,6 +3522,174 @@ function cleanFirestoreData(data: any): any {
             ))}
           </div>
         </section>
+
+        {/* Farmers Community Social Feed (Facebook-Style space) */}
+        <section id="community-feed-section" className="mb-12 text-left">
+          <div className="flex flex-col mb-6 border-b border-stone-200/80 pb-3">
+            <h2 className="text-lg md:text-xl font-serif font-bold text-stone-900 flex items-center gap-2">
+              💬 কৃষকদের সমাজ ও প্রতিদিনের আপডেট (Farmers Social Feed)
+            </h2>
+            <p className="text-xs text-stone-405 mt-0.5">কৃষকদের মাঠ বা খামার থেকে সরাসরি দৈনন্দিন কাজের সচিত্র আপডেট। লাইক ও কমেন্টের মাধ্যমে যুক্ত থাকুন!</p>
+          </div>
+
+          <div className="max-w-xl mx-auto space-y-5">
+            {farmerPosts.map(post => {
+              const custId = localStorage.getItem('kundor_customer_id') || (() => {
+                const newId = 'cust_' + Math.random().toString(36).substring(2, 9);
+                localStorage.setItem('kundor_customer_id', newId);
+                return newId;
+              })();
+              const hasLiked = post.likedBy?.includes(custId) || false;
+              
+              return (
+                <div key={post.id} className="bg-white rounded-2xl border border-stone-200 shadow-xs p-4 sm:p-5 space-y-3.5">
+                  {/* Post Title Header with Farmer details */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <img 
+                        src={post.farmerAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=120'} 
+                        alt={post.farmerName} 
+                        className="w-9 h-9 rounded-full object-cover border border-stone-200" 
+                      />
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="font-serif font-bold text-xs text-stone-900">{post.farmerName}</h4>
+                          <span className="bg-emerald-50 text-emerald-800 text-[8px] font-black px-1.5 py-0.5 rounded-full border border-emerald-150">যাচাইকৃত চাষী</span>
+                        </div>
+                        <span className="text-[9px] text-stone-400 font-medium font-sans block leading-none">
+                          {new Date(post.timestamp).toLocaleDateString('bn-BD', { day: 'numeric', month: 'long', year: 'numeric' })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Body textual text */}
+                  <p className="text-[11px] text-stone-700 leading-relaxed whitespace-pre-line text-justify font-sans">
+                    {post.body}
+                  </p>
+
+                  {/* Body photo attachment */}
+                  {post.img && (
+                    <div className="rounded-xl overflow-hidden aspect-video border bg-stone-100">
+                      <img src={post.img} alt="Post image attachment" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+
+                  {/* Interactive Like/Comments counts metrics */}
+                  <div className="flex items-center justify-between text-[10px] text-stone-400 border-y border-stone-100 py-1.5">
+                    <button 
+                      onClick={async () => {
+                        try {
+                          const { doc, updateDoc, arrayUnion, arrayRemove } = await import('firebase/firestore');
+                          const postRef = doc(db, 'farmer_posts', post.id);
+                          if (hasLiked) {
+                            await updateDoc(postRef, {
+                              likes: Math.max(0, (post.likes || 1) - 1),
+                              likedBy: arrayRemove(custId)
+                            });
+                          } else {
+                            await updateDoc(postRef, {
+                              likes: (post.likes || 0) + 1,
+                              likedBy: arrayUnion(custId)
+                            });
+                          }
+                        } catch (err) {
+                          console.error("Error toggling like:", err);
+                        }
+                      }}
+                      className={`flex items-center gap-1 hover:text-emerald-800 font-extrabold ${hasLiked ? 'text-emerald-800 scale-102 font-black' : ''}`}
+                    >
+                      <span>👍 {post.likes || 0} টি লাইক</span>
+                    </button>
+                    <span className="font-medium font-sans">💬 {post.comments?.length || 0} টি মন্তব্য</span>
+                  </div>
+
+                  {/* Actual list of comments */}
+                  {post.comments && post.comments.length > 0 && (
+                    <div className="space-y-1.5 bg-stone-50 p-2.5 rounded-xl border border-stone-100 max-h-36 overflow-y-auto no-scrollbar font-sans text-left">
+                      {post.comments.map((comment: any, idx: number) => (
+                        <div key={idx} className="text-[10px] leading-relaxed">
+                          <span className="font-bold text-stone-900">{comment.userName}</span>: <span className="text-stone-600 font-medium">{comment.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Write a comment interface form block */}
+                  <div className="flex gap-1.5 items-center bg-stone-50 p-2 rounded-xl border border-stone-200">
+                    <input 
+                      type="text"
+                      placeholder="আপনার নাম..."
+                      id={`cmt-name-${post.id}`}
+                      className="w-20 px-2 py-1 bg-white border border-stone-205 outline-none text-[10px] rounded-lg focus:ring-1 focus:ring-emerald-700"
+                    />
+                    <input 
+                      type="text"
+                      placeholder="মন্তব্য লিখুন এবং এন্টার চাপুন..."
+                      id={`cmt-text-${post.id}`}
+                      onKeyDown={async (e) => {
+                        if (e.key === 'Enter') {
+                          const nameEl = document.getElementById(`cmt-name-${post.id}`) as HTMLInputElement;
+                          const textEl = document.getElementById(`cmt-text-${post.id}`) as HTMLInputElement;
+                          const nameVal = nameEl?.value.trim() || 'গ্রাহক';
+                          const textVal = textEl?.value.trim();
+                          
+                          if (!textVal) return;
+                          try {
+                            const { doc, updateDoc, arrayUnion } = await import('firebase/firestore');
+                            const postRef = doc(db, 'farmer_posts', post.id);
+                            const newComment = {
+                              userName: nameVal,
+                              text: textVal,
+                              timestamp: new Date().toISOString()
+                            };
+                            await updateDoc(postRef, {
+                              comments: arrayUnion(newComment)
+                            });
+                            if (textEl) textEl.value = '';
+                          } catch (err) {
+                            console.error(err);
+                          }
+                        }
+                      }}
+                      className="flex-1 px-2.5 py-1 bg-white border border-stone-205 outline-none text-[10px] rounded-lg focus:ring-1 focus:ring-emerald-700"
+                    />
+                    <button 
+                      onClick={async () => {
+                        const nameEl = document.getElementById(`cmt-name-${post.id}`) as HTMLInputElement;
+                        const textEl = document.getElementById(`cmt-text-${post.id}`) as HTMLInputElement;
+                        const nameVal = nameEl?.value.trim() || 'গ্রাহক';
+                        const textVal = textEl?.value.trim();
+                        
+                        if (!textVal) return;
+                        try {
+                          const { doc, updateDoc, arrayUnion } = await import('firebase/firestore');
+                          const postRef = doc(db, 'farmer_posts', post.id);
+                          const newComment = {
+                            userName: nameVal,
+                            text: textVal,
+                            timestamp: new Date().toISOString()
+                          };
+                          await updateDoc(postRef, {
+                            comments: arrayUnion(newComment)
+                          });
+                          if (textEl) textEl.value = '';
+                        } catch (err) {
+                          console.error(err);
+                        }
+                      }}
+                      className="bg-emerald-800 hover:bg-emerald-900 text-white font-bold px-2 py-1 rounded-lg text-[9px] flex items-center justify-center shrink-0 cursor-pointer"
+                    >
+                      কমেন্ট
+                    </button>
+                  </div>
+
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
         <section id="videos-section" className="mb-12">
           <SectionHeader title="🎥 খেত থেকে সরাসরি খামার আপডেট ভিডিও" count={(videos.length > 0 ? videos : INITIAL_VIDEOS).length} />
           
@@ -4130,6 +4414,8 @@ function cleanFirestoreData(data: any): any {
               setSelectedProduct(null);
             }}
             isAdmin={currentView === 'admin' || sessionStorage.getItem('admin_session') === 'active_session'}
+            isLoggedInFarmer={isLoggedInFarmer}
+            loggedInFarmer={loggedInFarmer}
             onUpdateProduct={async (updated) => {
               setDbProducts(prev => prev.map(p => p.id === updated.id ? updated : p));
               setSelectedProduct(null);
@@ -4279,6 +4565,195 @@ function cleanFirestoreData(data: any): any {
                 </button>
                 <button 
                   onClick={() => setEditingContent(null)}
+                  className="px-4 bg-stone-250 hover:bg-stone-300 text-stone-700 font-bold py-2.5 rounded-xl text-xs transition cursor-pointer"
+                >
+                  বাতিল
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Admin Product Editing Modal Overlay */}
+      <AnimatePresence>
+        {editingProduct && (
+          <div className="fixed inset-0 z-[180] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 max-w-lg w-full border border-stone-200 shadow-2xl space-y-4 text-left my-8 font-sans"
+            >
+              <div className="flex justify-between items-center border-b pb-2">
+                <h3 className="font-serif font-black text-emerald-950 text-base">✏️ পণ্য তথ্য সম্পাদন করুন</h3>
+                <button onClick={() => setEditingProduct(null)} className="p-1 rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-700 cursor-pointer">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+                {/* Product Name */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-500 uppercase">পণ্যের নাম (বাংলা) *</label>
+                  <input 
+                    type="text"
+                    value={editingProduct.title}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, title: e.target.value })}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl outline-none text-xs text-stone-850 focus:ring-1 focus:ring-emerald-700 font-sans font-semibold"
+                    placeholder="যেমন: দেশী তাজা বেগুন"
+                  />
+                </div>
+
+                {/* Slug */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-500 uppercase">ইউনিক স্ল্যাগ (ইংরেজি)</label>
+                  <input 
+                    type="text"
+                    value={editingProduct.slug}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, slug: e.target.value })}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl outline-none text-xs text-stone-850 focus:ring-1 focus:ring-emerald-700 font-sans font-semibold"
+                    placeholder="যেমন: deshi-fresh-begun"
+                  />
+                </div>
+
+                {/* Price & Unit */}
+                <div className="grid grid-cols-2 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-stone-500 uppercase">মূল্য (টাকা) *</label>
+                    <input 
+                      type="number"
+                      value={editingProduct.price}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl outline-none text-xs text-stone-850 focus:ring-1 focus:ring-emerald-700 font-sans font-semibold"
+                      placeholder="যেমন: ৬০"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-stone-500 uppercase">পরিমাণ বা ইউনিট *</label>
+                    <input 
+                      type="text"
+                      value={editingProduct.unit}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, unit: e.target.value })}
+                      className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl outline-none text-xs text-stone-850 focus:ring-1 focus:ring-emerald-700 font-sans font-semibold"
+                      placeholder="যেমন: ১ কেজি অথবা ১ পিস"
+                    />
+                  </div>
+                </div>
+
+                {/* Category & Farmer Selectors */}
+                <div className="grid grid-cols-2 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-stone-500 uppercase">শ্রেণী বা ক্যাটাগরি *</label>
+                    <select
+                      value={editingProduct.cat}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, cat: e.target.value })}
+                      className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl outline-none text-xs text-stone-850 focus:ring-1 focus:ring-emerald-700 font-sans font-semibold"
+                    >
+                      {categoriesList.filter(c => c.id !== 'all').map(category => (
+                        <option key={category.id} value={category.id}>
+                          {category.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-stone-500 uppercase font-sans">উৎপাদক বা কৃষক *</label>
+                    <select
+                      value={editingProduct.farmerId}
+                      onChange={(e) => {
+                        const selectedId = parseInt(e.target.value) || 0;
+                        const farmerObj = farmers.find(f => f.id === selectedId);
+                        setEditingProduct({
+                          ...editingProduct,
+                          farmerId: selectedId,
+                          farmer: farmerObj ? farmerObj.name : ''
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl outline-none text-xs text-stone-850 focus:ring-1 focus:ring-emerald-700 font-sans font-semibold"
+                    >
+                      {(farmers.length > 0 ? farmers : INITIAL_FARMERS).map(farmer => (
+                        <option key={farmer.id} value={farmer.id}>
+                          {farmer.name} ({farmer.location})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Product Description */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-stone-500 uppercase">পণ্যের বর্ণনা / বিবরণ</label>
+                  <textarea
+                    rows={3}
+                    value={editingProduct.description || ''}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl outline-none text-xs text-stone-850 focus:ring-1 focus:ring-emerald-700 font-sans font-semibold leading-relaxed"
+                    placeholder="পণ্যের গুণাগুণ ও বিস্তারিত বর্ণনা দিন..."
+                  />
+                </div>
+
+                {/* Best Seller / Highlighting Option */}
+                <div className="flex items-center justify-between p-3 bg-stone-50 rounded-2xl border border-stone-100">
+                  <div className="text-left">
+                    <h5 className="text-xs font-bold text-stone-800">সেরা বিক্রিত ফসল (Best Seller)</h5>
+                    <p className="text-[9px] text-stone-400 font-sans">এটি অন করলে পণ্যটির উপর 'সেরা বিক্রয়' ব্যাজ প্রদর্শিত হবে</p>
+                  </div>
+                  <button 
+                    type="button"
+                    onClick={() => setEditingProduct({ ...editingProduct, isBestSeller: !editingProduct.isBestSeller })}
+                    className={`w-11 h-6 rounded-full transition-colors relative block cursor-pointer ${editingProduct.isBestSeller ? 'bg-emerald-600' : 'bg-stone-300'}`}
+                  >
+                    <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-xs transition-transform ${editingProduct.isBestSeller ? 'left-5.5' : 'left-0.5'}`} />
+                  </button>
+                </div>
+
+                {/* Image Upload Zone */}
+                <div className="space-y-2">
+                  <ImageUploadZone 
+                    label="ফসল বা খাদ্যের মূল ছবি (Upload Product Photo)"
+                    initialImage={editingProduct.img}
+                    onImageUploaded={(base64) => {
+                      setEditingProduct({ ...editingProduct, img: base64 });
+                    }}
+                  />
+                  {editingProduct.img && !editingProduct.img.startsWith('data:') && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-stone-500 uppercase">অথবা ছবির সরাসরি লিঙ্ক (Optional URL)</label>
+                      <input 
+                        type="text"
+                        value={editingProduct.img}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, img: e.target.value })}
+                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl outline-none text-[11px] text-stone-700 font-sans"
+                        placeholder="ছবির সরাসরি http:// বা https:// লিঙ্ক"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t mt-4">
+                <button 
+                  onClick={async () => {
+                    if (!editingProduct.title.trim()) {
+                      alert('দয়া করে পণ্যের নাম প্রদান করুন!');
+                      return;
+                    }
+                    if (editingProduct.price <= 0) {
+                      alert('দয়া করে পণ্যের সঠিক মূল্য প্রদান করুন!');
+                      return;
+                    }
+
+                    await setDbProducts(prev => prev.map(p => p.id === editingProduct.id ? editingProduct : p));
+                    setEditingProduct(null);
+                    alert('পণ্য সফলভাবে আপডেট করা হয়েছে!');
+                  }}
+                  className="flex-1 bg-emerald-800 hover:bg-emerald-900 text-white font-bold py-2.5 rounded-xl text-xs transition cursor-pointer"
+                >
+                  সেভ করুন
+                </button>
+                <button 
+                  onClick={() => setEditingProduct(null)}
                   className="px-4 bg-stone-250 hover:bg-stone-300 text-stone-700 font-bold py-2.5 rounded-xl text-xs transition cursor-pointer"
                 >
                   বাতিল
@@ -4538,6 +5013,7 @@ function cleanFirestoreData(data: any): any {
                     {[
                       { id: 'orders', label: '📦 খামার অর্ডারস' },
                       { id: 'add_product', label: '🌱 নতুন ফসল আপলোড' },
+                      { id: 'posts_videos', label: '🎥 খামার পোস্ট ও ভিডিও' },
                       { id: 'edit_profile', label: '📝 প্রোফাইল ও পাসওয়ার্ড' },
                       { id: 'upgrade', label: '👑 মেম্বারশিপ ফি' }
                     ].map(tab => (
@@ -4780,6 +5256,171 @@ function cleanFirestoreData(data: any): any {
                           অনুমোদনের জন্য প্রোডাক্ট জমা দিন
                         </button>
                       </form>
+                    )}
+
+                    {/* farmer_posts AND youtube videos sub-control board */}
+                    {farmerActiveTab === 'posts_videos' && (
+                      <div className="space-y-6">
+                        {/* A. Create a New Social Post */}
+                        <div className="bg-stone-50 border border-stone-200/80 p-4 rounded-2xl text-left space-y-3">
+                          <h4 className="text-xs font-bold text-stone-900 font-serif flex items-center gap-1.5">
+                            📝 নতুন ফেসবুক-স্টাইল পোস্ট তৈরি করুন
+                          </h4>
+                          <p className="text-[10px] text-stone-404">এই পোস্টটি সরাসরি হোমপেজের সোশ্যাল ফিডে আপনার নাম ও ছবিসহ দৃশ্যমান হবে। গ্রাহকরা লাইক ও কমেন্ট করতে পারবেন।</p>
+                          
+                          <div className="space-y-2">
+                            <textarea 
+                              placeholder="আজ আপনার খামারে কি হচ্ছে? শেয়ার করুন..."
+                              value={fPostText}
+                              onChange={e => setFPostText(e.target.value)}
+                              className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl outline-none text-xs text-stone-700 h-20 resize-none font-sans"
+                            />
+                            
+                            <div className="space-y-1">
+                              <label className="text-[9px] font-bold text-stone-500 uppercase">ঐচ্ছিক ছবির লিঙ্ক (Optional Image URL)</label>
+                              <input 
+                                type="text"
+                                placeholder="যেমন: https://images.unsplash.com/... বা ফাকা রাখুন"
+                                value={fPostImg}
+                                onChange={e => setFPostImg(e.target.value)}
+                                className="w-full px-3 py-1.5 bg-white border border-stone-200 rounded-xl outline-none text-[11px] text-stone-704 font-sans"
+                              />
+                            </div>
+
+                            <button 
+                              onClick={async () => {
+                                if (!fPostText.trim()) {
+                                  alert('দয়া করে পোস্টের মূল বক্তব্য টাইপ করুন!');
+                                  return;
+                                }
+                                try {
+                                  const { collection, addDoc } = await import('firebase/firestore');
+                                  const newPost = {
+                                    farmerId: loggedInFarmer.id || 999,
+                                    farmerName: loggedInFarmer.name,
+                                    farmerAvatar: loggedInFarmer.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=120',
+                                    body: fPostText,
+                                    img: fPostImg || null,
+                                    timestamp: new Date().toISOString(),
+                                    likes: 0,
+                                    likedBy: [],
+                                    comments: []
+                                  };
+                                  await addDoc(collection(db, 'farmer_posts'), newPost);
+                                  setFPostText('');
+                                  setFPostImg('');
+                                  alert('পোস্ট সফলভাবে পাবলিশ করা হয়েছে!');
+                                } catch (err) {
+                                  console.error(err);
+                                  alert('পোস্ট পাবলিশ করতে এরর ঘটেছে!');
+                                }
+                              }}
+                              className="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-bold py-2 rounded-xl text-xs transition cursor-pointer"
+                            >
+                              পাবলিশ করুন
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* B. Add YouTube Farm/Section Video */}
+                        <div className="bg-stone-50 border border-stone-200/80 p-4 rounded-2xl text-left space-y-3">
+                          <h4 className="text-xs font-bold text-stone-900 font-serif flex items-center gap-1.5">
+                            🎥 খামারের নতুন ইউটিউব ভিডিও লিঙ্ক যুক্ত করুন
+                          </h4>
+                          <p className="text-[10px] text-stone-404">আপনার চাষের জমি বা রান্নার রেসিপির ভিডিও লিঙ্ক দিন। এটি হোমপেজের ভিডিও গ্যালারিতে সরাসরি প্রদর্শিত হবে।</p>
+                          
+                          <div className="space-y-3">
+                            <div className="space-y-1">
+                              <label className="text-[9px] font-bold text-stone-500 uppercase">ভিডিওর আকর্ষণীয় শিরোনাম (বাংলায়)</label>
+                              <input 
+                                type="text"
+                                placeholder="যেমন: জৈব সার ব্যবহারের ম্যাজিক্যাল ফলন"
+                                value={fVideoTitle}
+                                onChange={e => setFVideoTitle(e.target.value)}
+                                className="w-full px-3 py-1.5 bg-white border border-stone-200 rounded-xl outline-none text-xs text-stone-700 font-sans"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[9px] font-bold text-stone-500 uppercase">ইউটিউব ভিডিও লিঙ্ক (YouTube Link)</label>
+                              <input 
+                                type="text"
+                                placeholder="যেমন: https://www.youtube.com/watch?v=..."
+                                value={fVideoUrl}
+                                onChange={e => setFVideoUrl(e.target.value)}
+                                className="w-full px-3 py-1.5 bg-white border border-stone-200 rounded-xl outline-none text-xs text-stone-700 font-sans"
+                              />
+                            </div>
+
+                            <button 
+                              onClick={async () => {
+                                if (!fVideoTitle.trim() || !fVideoUrl.trim()) {
+                                  alert('দয়া করে শিরোনাম এবং ইউটিউব লিঙ্ক দুটিই প্রদান করুন!');
+                                  return;
+                                }
+                                try {
+                                  const { doc, setDoc } = await import('firebase/firestore');
+                                  const nextId = videos.length > 0 ? Math.max(...videos.map(v => v.id)) + 1 : 1;
+                                  const formattedTitle = `${fVideoTitle} (চাষী: ${loggedInFarmer.name})`;
+                                  
+                                  const newVidObj = { 
+                                    id: nextId, 
+                                    title: formattedTitle, 
+                                    url: fVideoUrl,
+                                    farmerName: loggedInFarmer.name
+                                  };
+                                  
+                                  await setDoc(doc(db, 'videos', String(nextId)), newVidObj);
+                                  setFVideoTitle('');
+                                  setFVideoUrl('');
+                                  alert('ইউটিউব ভিডিও সফলভাবে যুক্ত করা হয়েছে!');
+                                } catch (err) {
+                                  console.error(err);
+                                  alert('ভিডিও এড করতে সাময়িক সমস্যা হয়েছে!');
+                                }
+                              }}
+                              className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 rounded-xl text-xs transition cursor-pointer"
+                            >
+                              ইউটিউব ভিডিও যোগ করুন
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* C. Manage Farmer's Posted Posts */}
+                        <div className="space-y-2 text-left">
+                          <h5 className="text-xs font-bold text-stone-700 font-serif">📝 আপনার দ্বারা প্রকাশিত পোস্টসমূহ</h5>
+                          {farmerPosts.filter(p => p.farmerName === loggedInFarmer.name || p.farmerId === loggedInFarmer.id).length === 0 ? (
+                            <p className="text-[10px] text-stone-400 italic">আপনি এখনো কোনো সোশ্যাল পোস্ট পাবলিশ করেননি।</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {farmerPosts.filter(p => p.farmerName === loggedInFarmer.name || p.farmerId === loggedInFarmer.id).map(p => (
+                                <div key={p.id} className="p-3 bg-white border border-stone-150 rounded-xl flex justify-between items-center text-xs">
+                                  <div className="truncate pr-2">
+                                    <span className="font-bold block text-stone-800 truncate">{p.body}</span>
+                                    <span className="text-[9px] text-stone-404 block mt-0.5">{new Date(p.timestamp).toLocaleDateString('bn-BD')}</span>
+                                  </div>
+                                  <button
+                                    onClick={async () => {
+                                      if (confirm('আপনি কি সত্যিই এই পোস্টটি মুছে ফেলতে চান?')) {
+                                        try {
+                                          const { doc, deleteDoc } = await import('firebase/firestore');
+                                          await deleteDoc(doc(db, 'farmer_posts', p.id));
+                                          alert('পোস্ট সফলভাবে মুছে ফেলা হয়েছে!');
+                                        } catch (err) {
+                                          alert('মুছে ফেলতে সমস্যা হয়েছে!');
+                                        }
+                                      }
+                                    }}
+                                    className="bg-red-50 hover:bg-red-100 text-red-600 px-2 py-1 rounded text-[10px] shrink-0 font-bold"
+                                  >
+                                    ডিলিট
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     )}
 
                     {/* 3. PROFILE & PASSWORD CHANGE TAB */}
@@ -6324,6 +6965,8 @@ function ProductDetailsSheet({
   onAdd,
   onSelectFarmer,
   isAdmin = false,
+  isLoggedInFarmer = false,
+  loggedInFarmer = null,
   onUpdateProduct,
   onDeleteProduct
 }: {
@@ -6333,6 +6976,8 @@ function ProductDetailsSheet({
   onAdd: (p: Product, qty: number, weight?: string) => void,
   onSelectFarmer: (f: Farmer) => void,
   isAdmin?: boolean,
+  isLoggedInFarmer?: boolean,
+  loggedInFarmer?: Farmer | null,
   onUpdateProduct?: (updated: Product) => void,
   onDeleteProduct?: (productId: number) => void
 }) {
@@ -6380,6 +7025,8 @@ function ProductDetailsSheet({
     return farmers.find(f => f.name === product.farmer || f.id === product.farmerId);
   }, [farmers, product]);
 
+  const canEdit = isAdmin || (isLoggedInFarmer && loggedInFarmer && (product.farmerId === loggedInFarmer.id || product.farmer === loggedInFarmer.name));
+
   return (
     <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-stone-900/60 backdrop-blur-sm">
       <motion.div 
@@ -6391,7 +7038,17 @@ function ProductDetailsSheet({
       >
         {/* Header */}
         <div className="p-4 border-b flex justify-between items-center bg-stone-50">
-          <h3 className="text-xs font-bold text-stone-400 uppercase tracking-widest font-mono">Product Detail Panel</h3>
+          <div>
+            <h3 className="text-xs font-bold text-stone-400 uppercase tracking-widest font-mono">Product Detail Panel</h3>
+            {canEdit && (
+              <button 
+                onClick={() => setIsEditing(!isEditing)}
+                className="mt-1 text-[10px] bg-amber-500 hover:bg-amber-600 text-stone-950 font-extrabold px-3 py-1 rounded-full flex items-center gap-1 transition cursor-pointer"
+              >
+                <span>{isEditing ? '🔍 ভিউ মোড দেখুন' : '✏️ এডিট প্রোডাক্ট / অফার'}</span>
+              </button>
+            )}
+          </div>
           <button onClick={onClose} className="p-1 hover:bg-stone-200 rounded-full">
             <X size={18} />
           </button>
@@ -6400,155 +7057,273 @@ function ProductDetailsSheet({
         {/* Content Body scrollable */}
         <div className="flex-1 overflow-y-auto p-5 space-y-5 text-left">
           
-          <div className="grid md:grid-cols-2 gap-6 items-start">
-            
-            {/* Gallery Section */}
-            <div className="space-y-2">
-              <div className="relative aspect-square rounded-2xl overflow-hidden border bg-stone-100 cursor-zoom-in" onClick={() => setLightboxOpen(true)}>
-                <img src={selectedImg} alt={product.title} className="w-full h-full object-cover transition-all" />
-                <span className="absolute bottom-2 right-2 bg-stone-900/40 text-white text-[8px] px-2 py-0.5 rounded-md flex items-center gap-0.5">
-                  <Plus size={10} /> বড় করুন
-                </span>
-              </div>
-              
-              <div className="grid grid-cols-4 gap-2">
-                {gallery.map((gImg, idx) => (
-                  <button 
-                    key={idx}
-                    onClick={() => setSelectedImg(gImg)}
-                    className={`aspect-square rounded-lg overflow-hidden border bg-stone-50 transition-all ${selectedImg === gImg ? 'border-emerald-800 scale-102 ring-1 ring-emerald-800/10' : 'opacity-80'}`}
-                  >
-                    <img src={gImg} alt="gallery micro preview" className="w-full h-full object-cover" />
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Information Section */}
+          {isEditing ? (
             <div className="space-y-4">
+              <span className="text-[10px] bg-amber-500 text-stone-950 font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
+                পণ্য / অফার সম্পাদনা প্যানেল (Editor Active) 🌱
+              </span>
+
               <div className="space-y-1">
-                <span className="text-[10px] bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-full font-black border border-emerald-150">
-                  অর্গানিক সবজি ফসল 🌱
-                </span>
-                
-                {/* Bangla and English stacked name names details */}
-                <h2 className="text-lg md:text-xl font-bold text-stone-900 pt-2 leading-tight">
-                  {product.title}
-                </h2>
-                <div className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider font-mono">
-                  Slug ID: {product.slug || 'organic-fresh-cargo'}
+                <label className="text-[10px] font-black text-stone-500 uppercase">পণ্যের নাম / অফারের নাম (Product Title)</label>
+                <input 
+                  type="text"
+                  value={editTitle}
+                  onChange={e => setEditTitle(e.target.value)}
+                  className="w-full px-3 py-2 bg-stone-50 border rounded-xl outline-none text-xs text-stone-800 font-sans font-bold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-stone-500 uppercase">মূল্য ৳ (Price)</label>
+                  <input 
+                    type="number"
+                    value={editPrice}
+                    onChange={e => setEditPrice(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-stone-50 border rounded-xl outline-none text-xs text-stone-800 font-mono font-bold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-stone-500 uppercase">প্যাকিং একক (Unit - যেমন: কেজি/বাস্কেট)</label>
+                  <input 
+                    type="text"
+                    value={editUnit}
+                    onChange={e => setEditUnit(e.target.value)}
+                    className="w-full px-3 py-2 bg-stone-50 border rounded-xl outline-none text-xs text-stone-800 font-sans"
+                  />
                 </div>
               </div>
 
-              {/* Farmer and Location info */}
-              <div className="bg-stone-50 border p-3 rounded-xl flex items-center justify-between">
-                <div>
-                  <div className="text-[9px] text-stone-404 font-extrabold uppercase">প্রকৃত উৎপাদক ও জেলা</div>
-                  <div className="font-bold text-xs text-stone-900 mt-0.5 flex items-center gap-0.5 text-emerald-800">
-                    🚜 {product.farmer}
-                  </div>
-                </div>
-                {mappedFarmer && (
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-stone-500 uppercase">ক্যাটাগরি টাইপ (Category)</label>
+                <select 
+                  value={editCat}
+                  onChange={e => setEditCat(e.target.value as any)}
+                  className="w-full px-3 py-2 bg-stone-50 border rounded-xl outline-none text-xs text-stone-800 font-sans"
+                >
+                  <option value="vegetables">শাকসবজি (Vegetables)</option>
+                  <option value="fruits">ফলমূল (Fruits)</option>
+                  <option value="groceries">মুদি ও মসলা (Groceries & Spices)</option>
+                  <option value="dairy">দুধ ও দুগ্ধজাত (Dairy & Ghee)</option>
+                  <option value="other">কম্বো ও অন্যান্য (Combos & Other)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-stone-500 uppercase">প্রোডাক্ট ছবির লিঙ্ক (Image URL)</label>
+                <input 
+                  type="text"
+                  value={editImg}
+                  onChange={e => setEditImg(e.target.value)}
+                  className="w-full px-3 py-2 bg-stone-50 border rounded-xl outline-none text-xs text-stone-800 font-mono"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-stone-500 uppercase">ফসল ও গুণের বিস্তারিত বিবরণ (Description)</label>
+                <textarea 
+                  value={editDesc}
+                  onChange={e => setEditDesc(e.target.value)}
+                  className="w-full px-3 py-2 bg-stone-50 border rounded-xl outline-none text-xs text-stone-700 h-24 resize-none font-sans"
+                />
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                {onDeleteProduct && (
                   <button 
-                    onClick={() => onSelectFarmer(mappedFarmer)}
-                    className="bg-emerald-800 hover:bg-emerald-900 text-white font-bold px-3 py-1.5 rounded-lg text-[9px]"
+                    onClick={() => {
+                      onDeleteProduct(product.id);
+                    }}
+                    className="bg-red-50 hover:bg-red-100 text-red-600 font-bold px-4 py-2.5 rounded-xl text-xs transition border border-red-200 cursor-pointer"
                   >
-                    কৃষক প্রোফাইল
+                    মুছে ফেলুন (Delete)
                   </button>
                 )}
+                <button 
+                  onClick={() => setIsEditing(false)}
+                  className="flex-1 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold py-2.5 rounded-xl text-xs transition text-center cursor-pointer"
+                >
+                  বাতিল করুন
+                </button>
+                <button 
+                  onClick={async () => {
+                    if (!editTitle.trim() || editPrice <= 0) {
+                      alert('দয়া করে সঠিক নাম এবং মূল্য টাইপ করুন!');
+                      return;
+                    }
+                    if (onUpdateProduct) {
+                      await onUpdateProduct({
+                        ...product,
+                        title: editTitle,
+                        price: editPrice,
+                        unit: editUnit,
+                        cat: editCat,
+                        description: editDesc,
+                        img: editImg
+                      });
+                      alert('পণ্যটি সফলভাবে পরিবর্তন করা হয়েছে!');
+                    }
+                    setIsEditing(false);
+                  }}
+                  className="flex-1 bg-emerald-800 hover:bg-emerald-900 text-white font-bold py-2.5 rounded-xl text-xs transition text-center shadow-xs cursor-pointer"
+                >
+                  পরিবর্তন সেভ করুন (Save)
+                </button>
               </div>
-
-              {/* Price Details (Scaled live based on selected weight) */}
-              <div className="flex items-baseline gap-3">
-                <span className="text-2xl font-black text-emerald-900">৳{getScaledPrice(product.price, selectedWeight, product.weightOptions).price}</span>
-                <span className="text-xs text-stone-400 line-through font-medium">৳{getScaledPrice(product.price, selectedWeight, product.weightOptions).originalPrice}</span>
-                <span className="text-[10px] text-stone-400 font-semibold">/ প্যাকিং: {selectedWeight || product.unit}</span>
-              </div>
-
-              {/* Delivery and Weight option select elements */}
-              {product.weightOptions && product.weightOptions.length > 0 && (
-                <div className="space-y-1.5">
-                  <label className="text-[9px] text-stone-400 font-extrabold uppercase tracking-widest block">প্যাকিং ওজন নির্বাচন</label>
-                  <div className="flex gap-2 flex-wrap">
-                    {product.weightOptions.map(opt => (
+            </div>
+          ) : (
+            <>
+              <div className="grid md:grid-cols-2 gap-6 items-start">
+                
+                {/* Gallery Section */}
+                <div className="space-y-2">
+                  <div className="relative aspect-square rounded-2xl overflow-hidden border bg-stone-100 cursor-zoom-in" onClick={() => setLightboxOpen(true)}>
+                    <img src={selectedImg} alt={product.title} className="w-full h-full object-cover transition-all" />
+                    <span className="absolute bottom-2 right-2 bg-stone-900/40 text-white text-[8px] px-2 py-0.5 rounded-md flex items-center gap-0.5">
+                      <Plus size={10} /> বড় করুন
+                    </span>
+                  </div>
+                  
+                  <div className="grid grid-cols-4 gap-2">
+                    {gallery.map((gImg, idx) => (
                       <button 
-                        key={opt}
-                        onClick={() => setSelectedWeight(opt)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${selectedWeight === opt ? 'bg-emerald-800 text-white border-emerald-800' : 'bg-white text-stone-600 hover:bg-stone-100'}`}
+                        key={idx}
+                        onClick={() => setSelectedImg(gImg)}
+                        className={`aspect-square rounded-lg overflow-hidden border bg-stone-50 transition-all ${selectedImg === gImg ? 'border-emerald-800 scale-102 ring-1 ring-emerald-800/10' : 'opacity-80'}`}
                       >
-                        {opt}
+                        <img src={gImg} alt="gallery micro preview" className="w-full h-full object-cover" />
                       </button>
                     ))}
                   </div>
                 </div>
-              )}
 
-              {/* Adjust Quantity Spinner */}
-              <div className="space-y-1.5">
-                <label className="text-[9px] text-stone-400 font-extrabold uppercase tracking-widest block">পরিমাণ নির্ধারণ</label>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center border rounded-xl overflow-hidden bg-white shadow-xs">
-                    <button 
-                      onClick={() => { if (quantity > 1) setQuantity(quantity - 1); }}
-                      className="px-3.5 py-1.5 text-xs font-bold hover:bg-stone-50"
-                    >
-                      -
-                    </button>
-                    <span className="px-4 text-xs font-bold font-mono">{quantity}</span>
-                    <button 
-                      onClick={() => setQuantity(quantity + 1)}
-                      className="px-3.5 py-1.5 text-xs font-bold hover:bg-stone-50"
-                    >
-                      +
-                    </button>
+                {/* Information Section */}
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-full font-black border border-emerald-150">
+                      {product.cat === 'other' ? 'কম্বো বাস্কেট অফার 🎁' : 'অর্গানিক সবজি ফসল 🌱'}
+                    </span>
+                    
+                    {/* Bangla and English stacked name names details */}
+                    <h2 className="text-lg md:text-xl font-bold text-stone-900 pt-2 leading-tight">
+                      {product.title}
+                    </h2>
+                    <div className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider font-mono">
+                      Slug ID: {product.slug || 'organic-fresh-cargo'}
+                    </div>
                   </div>
-                  <span className="text-[10px] text-stone-405 font-bold">মোট ইউনিট: {(quantity * 1).toLocaleString('bn-BD')} {product.unit}</span>
+
+                  {/* Farmer and Location info */}
+                  <div className="bg-stone-50 border p-3 rounded-xl flex items-center justify-between">
+                    <div>
+                      <div className="text-[9px] text-stone-404 font-extrabold uppercase">প্রকৃত উৎপাদক ও জেলা</div>
+                      <div className="font-bold text-xs text-stone-900 mt-0.5 flex items-center gap-0.5 text-emerald-800">
+                        🚜 {product.farmer}
+                      </div>
+                    </div>
+                    {mappedFarmer && (
+                      <button 
+                        onClick={() => onSelectFarmer(mappedFarmer)}
+                        className="bg-emerald-800 hover:bg-emerald-900 text-white font-bold px-3 py-1.5 rounded-lg text-[9px]"
+                      >
+                        কৃষক প্রোফাইল
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Price Details (Scaled live based on selected weight) */}
+                  <div className="flex items-baseline gap-3">
+                    <span className="text-2xl font-black text-emerald-900">৳{getScaledPrice(product.price, selectedWeight, product.weightOptions).price}</span>
+                    <span className="text-xs text-stone-400 line-through font-medium">৳{getScaledPrice(product.price, selectedWeight, product.weightOptions).originalPrice}</span>
+                    <span className="text-[10px] text-stone-400 font-semibold font-sans">/ প্যাকিং: {selectedWeight || product.unit}</span>
+                  </div>
+
+                  {/* Delivery and Weight option select elements */}
+                  {product.weightOptions && product.weightOptions.length > 0 && (
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] text-stone-400 font-extrabold uppercase tracking-widest block">প্যাকিং ওজন নির্বাচন</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {product.weightOptions.map(opt => (
+                          <button 
+                            key={opt}
+                            onClick={() => setSelectedWeight(opt)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${selectedWeight === opt ? 'bg-emerald-800 text-white border-emerald-800' : 'bg-white text-stone-600 hover:bg-stone-100'}`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Adjust Quantity Spinner */}
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] text-stone-400 font-extrabold uppercase tracking-widest block font-sans">পরিমাণ নির্ধারণ</label>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center border rounded-xl overflow-hidden bg-white shadow-xs">
+                        <button 
+                          onClick={() => { if (quantity > 1) setQuantity(quantity - 1); }}
+                          className="px-3.5 py-1.5 text-xs font-bold hover:bg-stone-50"
+                        >
+                          -
+                        </button>
+                        <span className="px-4 text-xs font-bold font-mono">{quantity}</span>
+                        <button 
+                          onClick={() => setQuantity(quantity + 1)}
+                          className="px-3.5 py-1.5 text-xs font-bold hover:bg-stone-50"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <span className="text-[10px] text-stone-405 font-bold">মোট ইউনিট: {(quantity * 1).toLocaleString('bn-BD')} {product.unit}</span>
+                    </div>
+                  </div>
+
+                  {/* Core CTA */}
+                  <button 
+                    onClick={() => onAdd(product, quantity, selectedWeight)}
+                    className="w-full bg-emerald-800 hover:bg-emerald-950 text-white py-3 rounded-xl font-bold text-xs shadow-md transition-all active:scale-97 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <ShoppingCart size={14} />
+                    <span>বাজার কার্টে যোগ করুন (৳{(product.price * quantity).toLocaleString('bn-BD')})</span>
+                  </button>
+
                 </div>
+
               </div>
 
-              {/* Core CTA */}
-              <button 
-                onClick={() => onAdd(product, quantity, selectedWeight)}
-                className="w-full bg-emerald-800 hover:bg-emerald-950 text-white py-3 rounded-xl font-bold text-xs shadow-md transition-all active:scale-97 cursor-pointer flex items-center justify-center gap-2"
-              >
-                <ShoppingCart size={14} />
-                <span>বাজার কার্টে যোগ করুন (৳{product.price * quantity})</span>
-              </button>
+              {/* Description Section stacked */}
+              <div className="space-y-2 border-t pt-4">
+                <h4 className="text-xs font-bold text-stone-900 uppercase tracking-widest font-serif">🌱 ফসল ও গুণগত মানের বিবরণী</h4>
+                <p className="text-[11px] text-stone-600 leading-relaxed text-left text-justify font-sans">
+                  {product.description || 'মহাস্থান গড় পুণ্ড্রবর্ধনের উর্বর পলিমাটির বগুড়া থেকে সংগৃহীত। রাসায়নিক সার মুক্ত এবং শতভাগ অরগানিক সার প্রয়োগে উৎপাদিত ফসল। সরাসরি মাঠ থেকে তোলার পর ক্ষতিকর কোন ফিজিক্যাল ওয়াশ বা কেমিক্যাল দেয়া হয়নি। গ্রাহকের রান্নাঘরে সতেজতার ডাবল নিশ্চয়তা প্রদান করতে আমরা বিশেষ কুলিং পার্সেল লজিস্টিক ব্যবহার করি।'}
+                </p>
+              </div>
 
-            </div>
-
-          </div>
-
-          {/* Description Section stacked */}
-          <div className="space-y-2 border-t pt-4">
-            <h4 className="text-xs font-bold text-stone-900 uppercase tracking-widest font-serif">🌱 ফসল ও গুণগত মানের বিবরণী</h4>
-            <p className="text-[11px] text-stone-600 leading-relaxed text-left text-justify">
-              {product.description || 'মহাস্থান গড় পুণ্ড্রবর্ধনের উর্বর পলিমাটির বগুড়া থেকে সংগৃহীত। রাসায়নিক সার মুক্ত এবং শতভাগ অরগানিক সার প্রয়োগে উৎপাদিত ফসল। সরাসরি মাঠ থেকে তোলার পর ক্ষতিকর কোন ফিজিক্যাল ওয়াশ বা কেমিক্যাল দেয়া হয়নি। গ্রাহকের রান্নাঘরে সতেজতার ডাবল নিশ্চয়তা প্রদান করতে আমরা বিশেষ কুলিং পার্সেল লজিস্টিক ব্যবহার করি।'}
-            </p>
-          </div>
-
-          {/* Core Reviews and ratings section */}
-          <div className="space-y-3.5 border-t pt-4">
-            <h4 className="text-xs font-bold text-stone-900 uppercase tracking-widest font-serif flex items-center gap-1">
-              <span>⭐️ গ্রাহক রিভিউ ও অভিজ্ঞতা</span>
-              <span className="bg-emerald-50 text-emerald-800 text-[8px] px-1.5 py-0.5 rounded-full font-mono">৫টি রিভিউ</span>
-            </h4>
-            
-            <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-              {[
-                { user: 'হাসান মিয়া, উত্তরা', rating: 5, text: 'সবজি সত্যি অনেক টাটকা ছিল!' },
-                { user: 'রাশেদ আলম, বনানী', rating: 4, text: 'বগুড়ার সতেজ ফসল সরাসরি খাওয়ার অভিজ্ঞতা চমৎকার।' }
-              ].map((rev, i) => (
-                <div key={i} className="bg-stone-50 p-2.5 rounded-lg border text-[10px] flex justify-between items-start">
-                  <div>
-                    <span className="font-bold text-stone-800 block">{rev.user}</span>
-                    <span className="text-stone-500 italic">"{rev.text}"</span>
-                  </div>
-                  <div className="text-yellow-400 font-mono text-[9px] font-bold">⭐️ {rev.rating}.০</div>
+              {/* Core Reviews and ratings section */}
+              <div className="space-y-3.5 border-t pt-4">
+                <h4 className="text-xs font-bold text-stone-900 uppercase tracking-widest font-serif flex items-center gap-1">
+                  <span>⭐️ গ্রাহক রিভিউ ও অভিজ্ঞতা</span>
+                  <span className="bg-emerald-50 text-emerald-800 text-[8px] px-1.5 py-0.5 rounded-full font-mono">৫টি রিভিউ</span>
+                </h4>
+                
+                <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                  {[
+                    { user: 'হাসান মিয়া, উত্তরা', rating: 5, text: 'সবজি সত্যি অনেক টাটকা ছিল!' },
+                    { user: 'রাশেদ আলম, বনানী', rating: 4, text: 'বগুড়ার সতেজ ফসল সরাসরি খাওয়ার অভিজ্ঞতা চমৎকার।' }
+                  ].map((rev, i) => (
+                    <div key={i} className="bg-stone-50 p-2.5 rounded-lg border text-[10px] flex justify-between items-start font-sans">
+                      <div>
+                        <span className="font-bold text-stone-800 block">{rev.user}</span>
+                        <span className="text-stone-500 italic">"{rev.text}"</span>
+                      </div>
+                      <div className="text-yellow-400 font-mono text-[9px] font-bold">⭐️ {rev.rating}.০</div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
+            </>
+          )}
 
         </div>
       </motion.div>
