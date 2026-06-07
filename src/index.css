@@ -27,3 +27,32 @@
     scrollbar-width: none;
   }
 }
+
+@keyframes aiPulse {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.4), 0 0 0 1px rgba(16, 185, 129, 0.3);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.7), 0 0 0 3px rgba(16, 185, 129, 0.35);
+    transform: scale(1.05);
+  }
+}
+
+@keyframes aiRotation {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.ai-avatar-animated {
+  animation: aiPulse 2.2s infinite ease-in-out;
+}
+
+.ai-halo-animated {
+  position: absolute;
+  inset: -3px;
+  border-radius: 9999px;
+  border: 1.5px dashed rgba(245, 158, 11, 0.6);
+  animation: aiRotation 14s linear infinite;
+  pointer-events: none;
+}

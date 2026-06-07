@@ -57,7 +57,8 @@ import SplashScreen from './components/SplashScreen';
 import AdminPanel from './components/AdminPanel';
 import CustomerDashboard from './components/CustomerDashboard';
 import { ImageUploadZone } from './components/ImageUploadZone';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocFromServer } from 'firebase/firestore';
+import SocialSubpage from './components/SocialSubpage';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocFromServer, getDocs, writeBatch } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { db, auth, handleFirestoreError, OperationType, storage } from './firebase';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
@@ -68,6 +69,10 @@ import { useIdleTimer } from './hooks/useIdleTimer';
 // Default avatars & placeholders
 const DEFAULT_FARMER_BOY = 'https://cdn.shopify.com/s/files/1/0991/0717/6761/files/Gemini_Generated_Image_k0x5bek0x5bek0x5.png?v=1778673806';
 const DEFAULT_FARMER_GIRL = 'https://cdn.shopify.com/s/files/1/0991/0717/6761/files/Gemini_Generated_Image_ce5s9yce5s9yce5s.png?v=1779307577';
+
+// Global Support Call & Whatsapp Contact Parameter Config 
+export const GLOBAL_SUPPORT_PHONE_NUMBER = "01931355398";
+export const GLOBAL_SUPPORT_PHONE_NUMBER_FORMATTED = "০১৯৩১-৩৫৫৩৯৮";
 
 interface ElegantAd {
   id: string;
@@ -982,7 +987,7 @@ function BlogSubpage({ videos, blogPosts, saveBlogPosts, isAdmin, AdminEditButto
 }
 
 // 3. Farmer Verification onboarding subpage
-function VerifySubpage({ onAddFarmer }: { onAddFarmer: (farmer: any) => Promise<void> }) {
+function VerifySubpage({ farmers = [], onAddFarmer }: { farmers?: Farmer[], onAddFarmer: (farmer: any) => Promise<void> }) {
   const [fName, setFName] = useState('');
   const [fPhone, setFPhone] = useState('');
   const [fHub, setFHub] = useState('bogra');
@@ -992,6 +997,9 @@ function VerifySubpage({ onAddFarmer }: { onAddFarmer: (farmer: any) => Promise<
   const [fImg, setFImg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  // Farmers listing search states
+  const [searchTerm, setSearchTerm] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1022,6 +1030,11 @@ function VerifySubpage({ onAddFarmer }: { onAddFarmer: (farmer: any) => Promise<
       setIsSubmitting(false);
     }
   };
+
+  const filteredFarmers = farmers.filter(f => {
+    const term = searchTerm.toLowerCase();
+    return f.name.toLowerCase().includes(term) || f.location.toLowerCase().includes(term) || (f.products && f.products.toLowerCase().includes(term));
+  });
 
   return (
     <motion.div 
@@ -1189,6 +1202,65 @@ function VerifySubpage({ onAddFarmer }: { onAddFarmer: (farmer: any) => Promise<
             </form>
           )}
         </div>
+      </div>
+
+      {/* Verified Farmers Catalog Section */}
+      <div className="bg-white border border-stone-200/80 rounded-3xl p-6 md:p-8 space-y-6 mt-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
+          <div>
+            <h3 className="text-base font-serif font-black text-stone-900 flex items-center gap-1.5">
+              🌾 আমাদের রেজিস্টার্ড ও ভেরিফাইড কৃষক পার্টনার সমূহ
+            </h3>
+            <p className="text-[11px] text-stone-400 font-medium">বাংলাদেশের বিভিন্ন হাব অঞ্চলের মাঠকর্মী দ্বারা প্রত্যয়িত ও নিবন্ধিত সম্মানিত চাষীবৃন্দ</p>
+          </div>
+          <div className="relative font-sans text-xs">
+            <input 
+              type="text"
+              placeholder="কৃষকের নাম, জেলা বা ফসল অনুসন্ধান..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full sm:w-64 pl-8 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:ring-1 focus:ring-emerald-800 text-stone-700"
+            />
+            <span className="absolute left-2.5 top-2 ml-0.5 text-stone-400 text-[10px]">🔍</span>
+          </div>
+        </div>
+
+        {filteredFarmers.length === 0 ? (
+          <div className="text-center py-10 text-stone-400 text-xs font-semibold">
+            <span>কোনো কৃষক খুঁজে পাওয়া যায়নি!</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredFarmers.map(farmer => (
+              <div key={farmer.id} className="bg-stone-50/50 border border-stone-200/60 rounded-2xl p-4 flex gap-3 hover:bg-stone-50 transition-colors">
+                <img 
+                  src={getFarmerAvatar(farmer)} 
+                  alt={farmer.name}
+                  className="w-12 h-12 rounded-full object-cover border border-emerald-150 shadow-2xs"
+                />
+                <div className="flex-1 min-w-0 font-sans text-left">
+                  <div className="flex items-center gap-1">
+                    <h4 className="font-serif font-black text-xs text-stone-850 truncate">{farmer.name}</h4>
+                    {farmer.verified && (
+                      <span className="bg-emerald-50 text-emerald-800 text-[7px] font-black px-1 rounded-full border border-emerald-150 inline-block shrink-0">✓ ভেরিফাইড</span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-emerald-850 font-bold flex items-center gap-0.5 mt-0.5">
+                    📍 {farmer.location}
+                  </p>
+                  <p className="text-[9.5px] text-stone-500 font-medium mt-1 truncate">
+                    🌾 {farmer.products || 'তাজা শাকসবজি / ফলমূল'}
+                  </p>
+                  <div className="flex items-center gap-3 mt-2 text-[9px] text-stone-400 font-medium select-none">
+                    <span>⭐ {farmer.rating || 4.8}</span>
+                    <span>•</span>
+                    <span>সক্রিয় চাষী</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -1460,6 +1532,16 @@ export default function App() {
     return (localStorage.getItem('lang_pref') as 'bn' | 'en') || 'bn';
   });
 
+  const handleDirectDownload = () => {
+    const link = document.createElement('a');
+    link.href = 'https://cdn.shopify.com/s/files/1/0991/0717/6761/files/KrishokBazar.apk'; // Download bundle placeholder
+    link.download = 'KrishokBazar.apk';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    alert('দালালমুক্ত কৃষক বাজার অফিসিয়াল অ্যান্ড্রয়েড অ্যাপ (APK File) সরাসরি ডাউনলোড শুরু হয়েছে। ডাউনলোড শেষ হলে ফাইলটি ওপেন করে ইনস্টল করুন!');
+  };
+
   const toggleLanguage = () => {
     const nextLang = currentLang === 'bn' ? 'en' : 'bn';
     setCurrentLang(nextLang);
@@ -1471,14 +1553,27 @@ export default function App() {
   };
 
   // Dynamic States reflecting data model changes in Admin panel
-  const [products, setProducts] = useState<Product[]>([]);
+   const [products, setProducts] = useState<Product[]>([]);
   const [farmers, setFarmers] = useState<Farmer[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [heroBanners, setHeroBanners] = useState<HeroBanner[]>([]);
   const [offers, setOffers] = useState<PromoOffer[]>([]);
   const [farmerPosts, setFarmerPosts] = useState<any[]>([]);
-  const [currentPage, setCurrentPage] = useState<'home' | 'about' | 'blog' | 'verify' | 'app' | 'customer-dashboard' | 'contact'>('home');
+
+  const productsRef = useRef<Product[]>([]);
+  const farmersRef = useRef<Farmer[]>([]);
+  const videosRef = useRef<Video[]>([]);
+  const reviewsRef = useRef<Review[]>([]);
+  const heroBannersRef = useRef<HeroBanner[]>([]);
+
+  useEffect(() => { productsRef.current = products; }, [products]);
+  useEffect(() => { farmersRef.current = farmers; }, [farmers]);
+  useEffect(() => { videosRef.current = videos; }, [videos]);
+  useEffect(() => { reviewsRef.current = reviews; }, [reviews]);
+  useEffect(() => { heroBannersRef.current = heroBanners; }, [heroBanners]);
+
+  const [currentPage, setCurrentPage] = useState<'home' | 'about' | 'blog' | 'social' | 'verify' | 'app' | 'customer-dashboard' | 'contact'>('home');
   const [activeOfferPopGroup, setActiveOfferPopGroup] = useState<PromoOffer | null>(null);
   const [activeAd, setActiveAd] = useState<ElegantAd | null>(null);
 
@@ -1804,6 +1899,9 @@ export default function App() {
   const [customerProfile, setCustomerProfile] = useState<{ name: string; phone: string; address: string } | null>(null);
   const [deliveryArea, setDeliveryArea] = useState<'dhaka_city' | 'sub_dhaka' | 'district_sadar'>('dhaka_city');
 
+  // Menu Drawer State
+  const [isNavMenuOpen, setIsNavMenuOpen] = useState(false);
+
   // Chatbot states
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
   const [isChatMaximized, setIsChatMaximized] = useState(false);
@@ -2032,8 +2130,9 @@ export default function App() {
   };
 
   const setDbProducts = async (value: React.SetStateAction<Product[]>) => {
-    const nextProducts = typeof value === 'function' ? (value as Function)(products) : value;
-    const removed = products.filter(p => !nextProducts.some(np => np.id === p.id));
+    const freshProducts = productsRef.current;
+    const nextProducts = typeof value === 'function' ? (value as Function)(freshProducts) : value;
+    const removed = freshProducts.filter(p => !nextProducts.some(np => np.id === p.id));
     for (const p of removed) {
       try {
         await deleteDoc(doc(db, 'products', String(p.id)));
@@ -2042,7 +2141,7 @@ export default function App() {
       }
     }
     for (const np of nextProducts) {
-      const existing = products.find(p => p.id === np.id);
+      const existing = freshProducts.find(p => p.id === np.id);
       if (!existing || JSON.stringify(existing) !== JSON.stringify(np)) {
         try {
           await setDoc(doc(db, 'products', String(np.id)), np);
@@ -2055,8 +2154,9 @@ export default function App() {
   };
 
   const setDbFarmers = async (value: React.SetStateAction<Farmer[]>) => {
-    const nextFarmers = typeof value === 'function' ? (value as Function)(farmers) : value;
-    const removed = farmers.filter(f => !nextFarmers.some(nf => nf.id === f.id));
+    const freshFarmers = farmersRef.current;
+    const nextFarmers = typeof value === 'function' ? (value as Function)(freshFarmers) : value;
+    const removed = freshFarmers.filter(f => !nextFarmers.some(nf => nf.id === f.id));
     for (const f of removed) {
       try {
         await deleteDoc(doc(db, 'farmers', String(f.id)));
@@ -2065,7 +2165,7 @@ export default function App() {
       }
     }
     for (const nf of nextFarmers) {
-      const existing = farmers.find(f => f.id === nf.id);
+      const existing = freshFarmers.find(f => f.id === nf.id);
       if (!existing || JSON.stringify(existing) !== JSON.stringify(nf)) {
         try {
           await setDoc(doc(db, 'farmers', String(nf.id)), nf);
@@ -2174,6 +2274,34 @@ export default function App() {
     initPixels();
     const savedCart = localStorage.getItem('krishok_cart');
     if (savedCart) setCart(JSON.parse(savedCart));
+
+    // Silent auto seeding sequence if empty
+    const silentAutoSeed = async () => {
+      try {
+        const prodCol = await getDocs(collection(db, 'products'));
+        if (prodCol.empty) {
+          console.log("Firestore empty. Seeding INITIAL_PRODUCTS / FARMERS / VIDEOS / REVIEWS silently...");
+          const batch = writeBatch(db);
+          INITIAL_PRODUCTS.forEach(p => {
+            batch.set(doc(db, 'products', String(p.id)), p);
+          });
+          INITIAL_FARMERS.forEach(f => {
+            batch.set(doc(db, 'farmers', String(f.id)), f);
+          });
+          INITIAL_VIDEOS.forEach(v => {
+            batch.set(doc(db, 'videos', String(v.id)), v);
+          });
+          INITIAL_REVIEWS.forEach(r => {
+            batch.set(doc(db, 'reviews', String(r.id)), r);
+          });
+          await batch.commit();
+          console.log("Silent seeding successfully completed!");
+        }
+      } catch (err) {
+        console.error("Silent seeding check failed:", err);
+      }
+    };
+    silentAutoSeed();
 
     // Real-time Firestore Subscriptions
     const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
@@ -2688,7 +2816,7 @@ function cleanFirestoreData(data: any): any {
     const message = `🛒 *কৃষক বাজার বাংলাদেশ (অর্ডার রশিদ)*\n------------------------------\n*অর্ডার আইডি:* ${freshOrderId}\n\n*পণ্যসমূহ:*\n${itemsText}\n\n*মোট ওজন:* ${totalCartWeight.toFixed(2)} কেজি\n*ডেলিভারি চার্জ:* ${deliveryChargeText}\n*সর্বমোট মূল্য:* ৳${orderTotal}\n\n👤 *গ্রাহক বিবরণী:*\n• নাম: ${details.name}\n• ফোন নম্বর: ${details.phone}\n• ঠিকানা: ${details.address}\n\n📝 *বিশেষ নির্দেশনা:* ${details.notes || 'নেই'}\n\n------------------------------\nমাঝারি আড়তদারদের শোষণমুক্ত খাঁটি ফসলের অর্থনীতি নিশ্চিত করার জন্য আপনাকে ধন্যবাদ!`;
     
     // Redirect securely to WhatsApp API channel
-    window.open(`https://wa.me/8801931355398?text=${encodeURIComponent(message)}`, '_blank');
+    window.open(`https://wa.me/88${GLOBAL_SUPPORT_PHONE_NUMBER}?text=${encodeURIComponent(message)}`, '_blank');
 
     setCart([]);
     setIsOrderModalOpen(false);
@@ -2745,7 +2873,7 @@ function cleanFirestoreData(data: any): any {
 
     // Formulate a clean, polite WhatsApp application message for instant approval
     const whatsappMsg = `সালাম, আমি একজন নতুন কৃষক হিসেবে কৃষক বাজারে আবেদন করেছি।\n\n*আমার নাম:* ${newFarmerEntry.name}\n*খামারের নাম:* ${newFarmerEntry.farmName}\n*ফোন নম্বর:* ${newFarmerEntry.phone}\n*জেলা:* ${newFarmerEntry.location}\n\nঅনুগ্রহ করে আমার আবেদনটি যাচাই করে একাউন্টটি অনুমোদন (Approve) করে দিন। ধন্যবাদ!`;
-    const whatsappLink = `https://wa.me/8801931355398?text=${encodeURIComponent(whatsappMsg)}`;
+    const whatsappLink = `https://wa.me/88${GLOBAL_SUPPORT_PHONE_NUMBER}?text=${encodeURIComponent(whatsappMsg)}`;
     
     // Secure outer browser window opener link trigger
     setTimeout(() => {
@@ -2893,6 +3021,14 @@ function cleanFirestoreData(data: any): any {
           {/* Bottom Row: Desktop Horizontal Navigation List */}
           <nav className="flex items-center gap-2 sm:gap-4 text-stone-605 text-[10.5px] font-bold font-sans overflow-x-auto pb-1 no-scrollbar pt-1.5 border-t border-stone-100 flex-nowrap shrink-0 whitespace-nowrap">
             <button 
+              onClick={() => setIsNavMenuOpen(true)} 
+              className="transition-all cursor-pointer shrink-0 py-1 px-3 rounded-lg bg-emerald-900 text-white font-black hover:bg-emerald-950 flex items-center gap-1 shadow-xs hover:scale-102"
+              title="কৃষক বাজার প্রধান মেনু"
+            >
+              <span>☰</span>
+              <span>মেনু (Menu)</span>
+            </button>
+            <button 
               onClick={() => { setCurrentPage('home'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} 
               className={`transition-colors cursor-pointer shrink-0 py-1 px-2.5 rounded-lg ${currentPage === 'home' ? 'bg-emerald-800 text-white' : 'hover:text-emerald-800 bg-emerald-50 text-emerald-950'}`}
             >
@@ -2909,6 +3045,12 @@ function cleanFirestoreData(data: any): any {
               className={`transition-colors cursor-pointer shrink-0 py-1 px-2.5 rounded-lg ${currentPage === 'blog' ? 'bg-emerald-800 text-white' : 'hover:text-emerald-850'}`}
             >
               📊 {t('ব্লগ ও ভিডিও ফিড (Blog)', 'Live Blog')}
+            </button>
+            <button 
+              onClick={() => { setCurrentPage('social'); }} 
+              className={`transition-colors cursor-pointer shrink-0 py-1 px-2.5 rounded-lg ${currentPage === 'social' ? 'bg-emerald-800 text-white' : 'hover:text-emerald-850'}`}
+            >
+              💬 {t('চাষী সামাজিক ফিড (Social Feed)', 'Farmer Social Feed')}
             </button>
             <button 
               onClick={() => { setCurrentPage('verify'); }} 
@@ -2929,8 +3071,8 @@ function cleanFirestoreData(data: any): any {
               📞 {t('যোগাযোগ (Contact)', 'Contact')}
             </button>
             <button 
-              onClick={() => { setCurrentPage('app'); }} 
-              className={`text-amber-800 hover:text-amber-955 transition-all font-extrabold text-[10.5px] cursor-pointer shrink-0 py-1 px-2.5 bg-amber-50 border border-amber-200 text-amber-950 rounded-lg flex items-center gap-1 hover:scale-102 hover:shadow-xs active:scale-98 ${currentPage === 'app' ? 'ring-2 ring-amber-500 bg-amber-100' : ''}`}
+              onClick={handleDirectDownload} 
+              className="text-amber-800 hover:text-amber-955 transition-all font-extrabold text-[10.5px] cursor-pointer shrink-0 py-1 px-2.5 bg-amber-50 border border-amber-200 text-amber-950 rounded-lg flex items-center gap-1 hover:scale-102 hover:shadow-xs active:scale-98"
               title="মোবাইল বা কম্পিউটারে অ্যাপ ইনস্টল করুন"
             >
               <span>📱</span>
@@ -3062,10 +3204,10 @@ function cleanFirestoreData(data: any): any {
             banners={heroBanners} 
             isAdmin={isAdmin}
             AdminEditButton={AdminEditButton}
-            onEditBanner={async (idx, title, subtitle, img) => {
+            onEditBanner={async (idx, title, subtitle, img, link) => {
               if (!isAdmin) return;
               const id = idx + 1;
-              const updated = { id, title, subtitle, img };
+              const updated = { id, title, subtitle, img, link: link || '' };
               try {
                 const { doc, setDoc } = await import('firebase/firestore');
                 const { db } = await import('./firebase');
@@ -3292,7 +3434,7 @@ function cleanFirestoreData(data: any): any {
 
                       {/* WhatsApp Order Button */}
                       <a 
-                        href={`https://wa.me/8801931355398?text=${encodeURIComponent(
+                        href={`https://wa.me/88${GLOBAL_SUPPORT_PHONE_NUMBER}?text=${encodeURIComponent(
                           `সালাম, কৃষক বাজার বাংলাদেশ থেকে আমি "${product.title}" (${product.unit}) অর্ডার করতে চাই।\nমূল্য: ৳${product.price}\nউৎস কৃষক: ${product.farmer}`
                         )}`}
                         target="_blank"
@@ -3507,7 +3649,7 @@ function cleanFirestoreData(data: any): any {
                     কৃষক প্রোফাইল
                   </button>
                   <a 
-                    href={`https://wa.me/8801931355398?text=${encodeURIComponent(
+                    href={`https://wa.me/88${GLOBAL_SUPPORT_PHONE_NUMBER}?text=${encodeURIComponent(
                       `সালাম, আমি যাচাইকৃত কৃষক "${farmer.name}" (${farmer.location}) এর উৎপাদিত ফসলের বিষয়ে জানতে এবং অর্ডার করতে চাই!`
                     )}`}
                     target="_blank"
@@ -3580,18 +3722,31 @@ function cleanFirestoreData(data: any): any {
                     <button 
                       onClick={async () => {
                         try {
-                          const { doc, updateDoc, arrayUnion, arrayRemove } = await import('firebase/firestore');
+                          const { doc, setDoc, arrayUnion, arrayRemove } = await import('firebase/firestore');
                           const postRef = doc(db, 'farmer_posts', post.id);
+                          const baseData = {
+                            farmerId: post.farmerId || null,
+                            farmerName: post.farmerName || '',
+                            farmerAvatar: post.farmerAvatar || '',
+                            body: post.body || '',
+                            img: post.img || '',
+                            timestamp: post.timestamp || new Date().toISOString(),
+                            likes: post.likes || 0,
+                            comments: post.comments || [],
+                            likedBy: post.likedBy || []
+                          };
                           if (hasLiked) {
-                            await updateDoc(postRef, {
+                            await setDoc(postRef, {
+                              ...baseData,
                               likes: Math.max(0, (post.likes || 1) - 1),
                               likedBy: arrayRemove(custId)
-                            });
+                            }, { merge: true });
                           } else {
-                            await updateDoc(postRef, {
+                            await setDoc(postRef, {
+                              ...baseData,
                               likes: (post.likes || 0) + 1,
                               likedBy: arrayUnion(custId)
-                            });
+                            }, { merge: true });
                           }
                         } catch (err) {
                           console.error("Error toggling like:", err);
@@ -3636,19 +3791,31 @@ function cleanFirestoreData(data: any): any {
                           
                           if (!textVal) return;
                           try {
-                            const { doc, updateDoc, arrayUnion } = await import('firebase/firestore');
+                            const { doc, setDoc, arrayUnion } = await import('firebase/firestore');
                             const postRef = doc(db, 'farmer_posts', post.id);
                             const newComment = {
                               userName: nameVal,
                               text: textVal,
                               timestamp: new Date().toISOString()
                             };
-                            await updateDoc(postRef, {
+                            const baseData = {
+                              farmerId: post.farmerId || null,
+                              farmerName: post.farmerName || '',
+                              farmerAvatar: post.farmerAvatar || '',
+                              body: post.body || '',
+                              img: post.img || '',
+                              timestamp: post.timestamp || new Date().toISOString(),
+                              likes: post.likes || 0,
+                              likedBy: post.likedBy || [],
+                              comments: post.comments || []
+                            };
+                            await setDoc(postRef, {
+                              ...baseData,
                               comments: arrayUnion(newComment)
-                            });
+                            }, { merge: true });
                             if (textEl) textEl.value = '';
                           } catch (err) {
-                            console.error(err);
+                            console.error("Error post comment:", err);
                           }
                         }
                       }}
@@ -3663,19 +3830,31 @@ function cleanFirestoreData(data: any): any {
                         
                         if (!textVal) return;
                         try {
-                          const { doc, updateDoc, arrayUnion } = await import('firebase/firestore');
+                          const { doc, setDoc, arrayUnion } = await import('firebase/firestore');
                           const postRef = doc(db, 'farmer_posts', post.id);
                           const newComment = {
                             userName: nameVal,
                             text: textVal,
                             timestamp: new Date().toISOString()
                           };
-                          await updateDoc(postRef, {
+                          const baseData = {
+                            farmerId: post.farmerId || null,
+                            farmerName: post.farmerName || '',
+                            farmerAvatar: post.farmerAvatar || '',
+                            body: post.body || '',
+                            img: post.img || '',
+                            timestamp: post.timestamp || new Date().toISOString(),
+                            likes: post.likes || 0,
+                            likedBy: post.likedBy || [],
+                            comments: post.comments || []
+                          };
+                          await setDoc(postRef, {
+                            ...baseData,
                             comments: arrayUnion(newComment)
-                          });
+                          }, { merge: true });
                           if (textEl) textEl.value = '';
                         } catch (err) {
-                          console.error(err);
+                          console.error("Error post comment:", err);
                         }
                       }}
                       className="bg-emerald-800 hover:bg-emerald-900 text-white font-bold px-2 py-1 rounded-lg text-[9px] flex items-center justify-center shrink-0 cursor-pointer"
@@ -3933,7 +4112,19 @@ function cleanFirestoreData(data: any): any {
           )}
           {currentPage === 'verify' && (
             <motion.div key="verify-key">
-              <VerifySubpage onAddFarmer={async (f) => { await setDbFarmers(prev => [...prev, f]); }} />
+              <VerifySubpage farmers={farmers} onAddFarmer={async (f) => { await setDbFarmers(prev => [...prev, f]); }} />
+            </motion.div>
+          )}
+          {currentPage === 'social' && (
+            <motion.div key="social-key">
+              <SocialSubpage 
+                farmerPosts={farmerPosts} 
+                isLoggedInFarmer={isLoggedInFarmer} 
+                loggedInFarmer={loggedInFarmer} 
+                isAdmin={isAdmin}
+                currentLang={currentLang}
+                t={t}
+              />
             </motion.div>
           )}
           {currentPage === 'app' && (
@@ -4045,8 +4236,8 @@ function cleanFirestoreData(data: any): any {
 
                 {/* WhatsApp */}
                 <a 
-                  href="https://wa.me/8801931355398" 
-                  target="_blank" 
+                  href={`https://wa.me/88${GLOBAL_SUPPORT_PHONE_NUMBER}`}
+                  target="_blank"
                   rel="noopener noreferrer" 
                   className="bg-[#25D366]/10 hover:bg-[#25D366] text-white border border-[#25D366]/20 hover:border-[#25D366] px-3.5 py-2 rounded-xl text-[10.5px] font-bold flex items-center gap-2 transition-all cursor-pointer"
                 >
@@ -5670,7 +5861,7 @@ function cleanFirestoreData(data: any): any {
                           <h6 className="font-serif font-black text-xs text-stone-900">💳 পেমেন্ট ভেরিফিকেশন ও আপগ্রেড ফর্ম</h6>
                           
                           <div className="bg-stone-50 border p-3 rounded-xl border-stone-250 text-[10px] text-stone-600 leading-relaxed font-sans font-medium">
-                            📢 আমাদের বিকাশ/নগদ এজেন্ট নম্বর: <span className="font-bold text-emerald-800 font-mono">01931-355398</span>
+                            📢 আমাদের বিকাশ/নগদ এজেন্ট নম্বর: <span className="font-bold text-emerald-800 font-mono">{GLOBAL_SUPPORT_PHONE_NUMBER_FORMATTED}</span>
                             <br />
                             মেম্বারশিপ ফিসের পরিমাণ সেন্ড মানি বা ক্যাশ ইন করার পর নিচের ফর্মে পেমেন্ট ট্রান্সফার আইডি সাবমিট করুন।
                           </div>
@@ -5925,7 +6116,7 @@ function cleanFirestoreData(data: any): any {
 
       {/* Floating WhatsApp Quick order trigger */}
       <a 
-        href="https://wa.me/8801931355398?text=%E0%A6%95%E0%A7%83%E0%A6%B7%E0%A6%95%20%E0%A6%AC%E0%A6%BE%E0%A6%9C%E0%A6%BE%E0%A6%B0%20%E0%A6%A5%E0%A7%87%E0%A6%95%E0%A7%87%2520%E0%A6%85%E0%A6%B0%E0%A7%8D%E0%A6%A1%E0%A6%BE%E0%A6%B0%252520%E0%A6%95%E0%A6%B0%E0%A6%A4%E0%A7%87%252520%E0%A6%9B%E0%A6%BE%E0%A6%B0!"
+        href={`https://wa.me/88${GLOBAL_SUPPORT_PHONE_NUMBER}?text=%E0%A6%95%E0%A7%83%E0%A6%B7%E0%A6%95%20%E0%A6%AC%E0%A6%BE%E0%A6%9C%E0%A6%BE%E0%A6%B0%20%E0%A6%A5%E0%A7%87%E0%A6%95%E0%A7%87%2520%E0%A6%85%E0%A6%B0%E0%A7%8D%E0%A6%A1%E0%A6%BE%E0%A6%B0%252520%E0%A6%95%E0%A6%B0%E0%A6%A4%E0%A7%87%252520%E0%A6%9B%E0%A6%BE%E0%A6%B0!`}
         target="_blank"
         rel="noopener noreferrer"
         className="fixed bottom-6 right-5 z-[90] bg-[#25D366] hover:bg-[#20ba5a] text-white p-2 rounded-2xl shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 group max-w-[38px] max-h-[38px] min-w-[38px] min-h-[38px]"
@@ -5939,6 +6130,143 @@ function cleanFirestoreData(data: any): any {
         </svg>
       </a>
 
+      {/* ☰ Left Off-Canvas Sidebar Navigation Menu Drawer */}
+      <AnimatePresence>
+        {isNavMenuOpen && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-start p-0 bg-stone-900/60 backdrop-blur-xs select-none">
+            <motion.div 
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 24, stiffness: 210 }}
+              className="bg-white w-full max-w-[280px] h-full shadow-2xl flex flex-col justify-between overflow-hidden text-left"
+            >
+              {/* Header */}
+              <div className="p-4 border-b flex items-center justify-between bg-emerald-900 text-white select-none">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full overflow-hidden border border-emerald-800 bg-white p-0.5">
+                    <img 
+                      src="https://cdn.shopify.com/s/files/1/0991/0717/6761/files/Gemini_Generated_Image_k0x5bek0x5bek0x5.png" 
+                      alt="Logo" 
+                      className="w-full h-full object-cover rounded-full"
+                    />
+                  </div>
+                  <span className="font-serif font-black text-xs sm:text-sm tracking-tight">কৃষক বাজার মেনু</span>
+                </div>
+                <button onClick={() => setIsNavMenuOpen(false)} className="p-1 hover:bg-white/10 rounded-full cursor-pointer">
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto p-4 py-5 space-y-5 text-left font-sans text-xs">
+                
+                {/* Lists Segment 1: Quick Shopping Categories */}
+                <div className="space-y-1.5">
+                  <h4 className="text-[10px] text-stone-400 font-extrabold uppercase tracking-widest block px-1">🥬 সরাসরি বাজার প্যাক্স</h4>
+                  <div className="grid grid-cols-1 gap-1 pl-1">
+                    <button 
+                      onClick={() => {
+                        setCurrentPage('home');
+                        setActiveCategory('ready-to-cook');
+                        setIsNavMenuOpen(false);
+                        setTimeout(() => {
+                          document.getElementById('categories-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }, 180);
+                      }}
+                      className="w-full text-left font-extrabold text-[10px] sm:text-[10.5px] text-stone-700 hover:text-emerald-800 bg-stone-50 hover:bg-emerald-50 px-2.5 py-2 rounded-xl border border-stone-200/50 transition flex items-center gap-2 cursor-pointer"
+                    >
+                      🍳 রেডি টু কুক (Ready Cook)
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setCurrentPage('home');
+                        setActiveCategory('weekly-combo');
+                        setIsNavMenuOpen(false);
+                        setTimeout(() => {
+                          document.getElementById('categories-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }, 180);
+                      }}
+                      className="w-full text-left font-extrabold text-[10px] sm:text-[10.5px] text-stone-700 hover:text-emerald-800 bg-stone-50 hover:bg-emerald-50 px-2.5 py-2 rounded-xl border border-stone-200/50 transition flex items-center gap-2 cursor-pointer"
+                    >
+                      🧺 সাপ্তাহিক কম্বো (Weekly Combo)
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setCurrentPage('home');
+                        setActiveCategory('monthly-combo');
+                        setIsNavMenuOpen(false);
+                        setTimeout(() => {
+                          document.getElementById('categories-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }, 180);
+                      }}
+                      className="w-full text-left font-extrabold text-[10px] sm:text-[10.5px] text-stone-700 hover:text-emerald-800 bg-stone-50 hover:bg-emerald-50 px-2.5 py-2 rounded-xl border border-stone-200/50 transition flex items-center gap-2 cursor-pointer"
+                    >
+                      🧺 মাসিক কম্বো (Monthly Combo)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Lists Segment 2: App Sections */}
+                <div className="space-y-1.5">
+                  <h4 className="text-[10px] text-stone-400 font-extrabold uppercase tracking-widest block px-1">📋 আমাদের সেকশনসমূহ</h4>
+                  <div className="grid grid-cols-1 gap-1 pl-1">
+                    <button 
+                      onClick={() => { setCurrentPage('blog'); setIsNavMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      className="w-full text-left font-extrabold text-[10px] sm:text-[10.5px] text-stone-700 hover:text-emerald-850 py-2 px-1 flex items-center gap-2 border-b border-stone-100 transition cursor-pointer"
+                    >
+                      📰 লাইভ ব্লগ (Blog Section)
+                    </button>
+                    <button 
+                      onClick={() => { setCurrentPage('verify'); setIsNavMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      className="w-full text-left font-extrabold text-[10px] sm:text-[10.5px] text-stone-700 hover:text-emerald-850 py-2 px-1 flex items-center gap-2 border-b border-stone-100 transition cursor-pointer"
+                    >
+                      🌾 চাষী তালিকা ও রেজিস্ট্রেশন
+                    </button>
+                    <button 
+                      onClick={() => { setCurrentPage('about'); setIsNavMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      className="w-full text-left font-extrabold text-[10px] sm:text-[10.5px] text-stone-700 hover:text-emerald-850 py-2 px-1 flex items-center gap-2 border-b border-stone-100 transition cursor-pointer"
+                    >
+                      👩‍🌾 আমাদের চ্যারিটি গল্প (About Us)
+                    </button>
+                    <button 
+                      onClick={() => { setCurrentPage('contact'); setIsNavMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      className="w-full text-left font-extrabold text-[10px] sm:text-[10.5px] text-stone-700 hover:text-emerald-850 py-2 px-1 flex items-center gap-2 border-b border-stone-100 transition cursor-pointer"
+                    >
+                      📞 যোগাযোগ কেন্দ্র (Contact)
+                    </button>
+                  </div>
+                </div>
+
+                {/* List Segment 3: App Direct Installer Link */}
+                <div className="bg-amber-50/70 border border-amber-200/50 rounded-2xl p-4 space-y-2.5 text-amber-955 select-none text-left">
+                  <span className="text-[10px] font-black uppercase tracking-wider block">📲 অ্যাপ ডাউনলোডার</span>
+                  <p className="text-[9px] text-stone-500 font-semibold leading-relaxed">কোনো ঝামেলা ছাড়াই সরাসরি আমাদের অফিসিয়াল অ্যান্ড্রয়েড অ্যাপ ডাউনলোড করে ইন্সটল করুন।</p>
+                  <button 
+                    onClick={() => {
+                      setIsNavMenuOpen(false);
+                      handleDirectDownload();
+                    }}
+                    className="w-full bg-amber-600 hover:bg-amber-700 text-white font-extrabold py-2 rounded-xl transition text-[10.5px] cursor-pointer text-center flex items-center justify-center gap-1.5 shadow-xs"
+                  >
+                    <span>📥 অ্যাপ ডাউনলোড করুন</span>
+                  </button>
+                </div>
+
+              </div>
+
+              {/* Drawer Footer */}
+              <div className="p-4 bg-stone-50 border-t text-center text-[10px] text-stone-400 font-medium">
+                © ২০২৬ কৃষক বাজার বাংলাদেশ
+              </div>
+            </motion.div>
+            
+            {/* Quick click overlay to close */}
+            <div className="flex-1 h-full cursor-pointer bg-stone-900/10" onClick={() => setIsNavMenuOpen(false)} />
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* ============================================================== */}
       {/* 🤖 'কৃষক বন্ধু' (Farmer Friend) AI Chatbot Interactive Drawer Panel */}
       {/* ============================================================== */}
@@ -5950,10 +6278,10 @@ function cleanFirestoreData(data: any): any {
             exit={{ opacity: 0, y: 50, scale: 0.95 }}
             transition={{ duration: 0.2 }}
             className={isChatMini
-              ? "fixed bottom-38 right-6 z-[100] w-16 h-16 bg-emerald-900 border-2 border-amber-400 hover:border-amber-350 rounded-full flex items-center justify-center cursor-pointer shadow-[0_4px_25px_rgba(6,95,70,0.55)] transition-all hover:scale-110 overflow-hidden"
+              ? "fixed bottom-38 right-6 z-[100] w-16 h-16 bg-emerald-950 border border-amber-400 hover:border-amber-300 rounded-full flex items-center justify-center cursor-pointer shadow-[0_4px_25px_rgba(6,95,70,0.55)] transition-all hover:scale-110 overflow-visible"
               : isChatMaximized 
-                ? "fixed inset-x-4 bottom-24 md:inset-x-auto md:right-6 md:bottom-24 z-[100] w-[calc(100vw-32px)] md:w-[760px] h-[78vh] bg-white rounded-3xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col font-sans text-left transition-all duration-300"
-                : "fixed bottom-38 right-6 z-[100] w-[340px] sm:w-[380px] h-[480px] bg-white rounded-3xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col font-sans text-left transition-all duration-300"
+                ? "fixed inset-0 z-[120] w-screen h-screen bg-white overflow-hidden flex flex-col font-sans text-left transition-all duration-300"
+                : "fixed inset-x-0 bottom-0 top-0 sm:inset-auto sm:bottom-20 sm:right-6 z-[120] w-full h-full sm:w-[380px] sm:h-[530px] bg-white sm:rounded-3xl shadow-2xl border-t sm:border border-stone-200 overflow-hidden flex flex-col font-sans text-left transition-all duration-350"
             }
           >
             {isChatMini ? (
@@ -5962,9 +6290,10 @@ function cleanFirestoreData(data: any): any {
                 className="w-full h-full flex items-center justify-center relative group/avatar"
                 title="Riktaz AI চ্যাটবট খুলুন"
               >
-                <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-400 bg-emerald-50 shadow-md flex items-center justify-center relative p-0.5 animate-pulse">
+                <div className="w-13 h-13 rounded-full relative bg-emerald-950 shadow-md flex items-center justify-center p-0.5 ai-avatar-animated">
+                  <div className="ai-halo-animated" />
                   <img 
-                    src="https://cdn.shopify.com/s/files/1/0991/0717/6761/files/Gemini_Generated_Image_k0x5bek0x5bek0x5.png" 
+                    src={DEFAULT_FARMER_GIRL} 
                     alt="Riktaz AI" 
                     className="w-full h-full object-cover rounded-full"
                     referrerPolicy="no-referrer"
@@ -6395,7 +6724,7 @@ function cleanFirestoreData(data: any): any {
                       document.getElementById('products-section')?.scrollIntoView({ behavior: 'smooth' });
                       setCurrentPage('home');
                     } else if (act === 'whatsapp') {
-                      window.open('https://wa.me/8801931355398?text=' + encodeURIComponent('সালাম এডমিন, আমি কৃষক বাজার বিজ্ঞাপনের অফারটি সম্পর্কে চ্যাট করতে চাই।'), '_blank');
+                      window.open(`https://wa.me/88${GLOBAL_SUPPORT_PHONE_NUMBER}?text=` + encodeURIComponent('সালাম এডমিন, আমি কৃষক বাজার বিজ্ঞাপনের অফারটি সম্পর্কে চ্যাট করতে চাই।'), '_blank');
                     } else if (act === 'verify') {
                       setCurrentPage('verify');
                     }
@@ -6456,8 +6785,8 @@ function cleanFirestoreData(data: any): any {
                     <div className="p-3 bg-white border border-amber-200 rounded-xl space-y-1.5">
                       <p className="text-[11px] font-semibold text-stone-900 leading-normal">নিচের যে কোনো একটি নম্বরে <strong>৳ {selectedPlanForPayment.amount}</strong> সেন্ড মানি করুন:</p>
                       <div className="flex flex-wrap gap-4 font-mono font-bold text-stone-850 text-[11px] py-1">
-                        <div>📱 বিকাশ পার্সোনাল: <span className="text-pink-700 bg-pink-50 px-1.5 py-0.5 rounded border border-pink-100 font-bold">01931-355398</span></div>
-                        <div>📱 নগদ পার্সোনাল: <span className="text-orange-700 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100 font-bold font-bold">01931-355398</span></div>
+                        <div>📱 বিকাশ পার্সোনাল: <span className="text-pink-700 bg-pink-50 px-1.5 py-0.5 rounded border border-pink-100 font-bold">{GLOBAL_SUPPORT_PHONE_NUMBER_FORMATTED}</span></div>
+                        <div>📱 নগদ পার্সোনাল: <span className="text-orange-700 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100 font-bold font-bold">{GLOBAL_SUPPORT_PHONE_NUMBER_FORMATTED}</span></div>
                       </div>
                       <p className="text-[10px] text-stone-550 leading-normal">পেমেন্ট সম্পন্ন করার পর আপনার সেন্ডার নম্বর এবং ট্রানজেকশন আইডি (TxnID) নিচে ইনপুট দিয়ে সাবমিট করুন।</p>
                     </div>
@@ -6804,7 +7133,7 @@ function cleanFirestoreData(data: any): any {
 interface HeroSliderProps {
   banners: any[];
   isAdmin: boolean;
-  onEditBanner?: (idx: number, title: string, subtitle: string, img: string) => void;
+  onEditBanner?: (idx: number, title: string, subtitle: string, img: string, link?: string) => void;
   AdminEditButton?: any;
 }
 
@@ -6816,19 +7145,22 @@ function HeroSlider({ banners, isAdmin, onEditBanner, AdminEditButton }: HeroSli
       id: 1,
       img: 'https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?auto=format&fit=crop&q=80&w=1200', // Real Bangladesh Farmer Image
       title: 'মাঠের তাজা সবজি\nদালাল ছাড়াই সরাসরি\nআপনার রান্নাঘরে',
-      subtitle: 'বগুড়া ও যশোরের উর্বর পলির জমি থেকে শোষিত না হয়ে সরাসরি ক্ষুদ্র কৃষকের হাতের ফসল।'
+      subtitle: 'বগুড়া ও যশোরের উর্বর পলির জমি থেকে শোষিত না হয়ে সরাসরি ক্ষুদ্র কৃষকের হাতের ফসল।',
+      link: ''
     },
     {
       id: 2,
       img: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=1200', // Fresh Vegetables Image
       title: 'শতভাগ ভেজালমুক্ত তাজা শাকসবজি',
-      subtitle: 'সম্পೂರ್ಣ অরগানিক সার প্রয়োগ করে উৎপাদিত তরতাজা বিষমুক্ত কৃষি পণ্য সামগ্রী।'
+      subtitle: 'সম্পೂರ್ಣ অরগানিক সার প্রয়োগ করে উৎপাদিত তরতাজা বিষমুক্ত কৃষি পণ্য সামগ্রী।',
+      link: ''
     },
     {
       id: 3,
       img: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&q=80&w=1200', // Family Cooking Scene
       title: 'সুস্থ ও সুখী পরিবারের রান্নাঘর',
-      subtitle: 'নিরাপদ আহারের জন্য সরাসরি কৃষকের বাড়ি থেকে সতেজ উপাদানের নিশ্চয়তা।'
+      subtitle: 'নিরাপদ আহারের জন্য সরাসরি কৃষকের বাড়ি থেকে সতেজ উপাদানের নিশ্চয়তা।',
+      link: ''
     }
   ];
 
@@ -6890,21 +7222,27 @@ function HeroSlider({ banners, isAdmin, onEditBanner, AdminEditButton }: HeroSli
                   itemKey={`hero_banner_img_${activeSlide.id}`}
                   label={`স্লাইডার #${activeSlide.id} ব্যাকগ্রাউন্ড ইমেজ URL`}
                   value={activeSlide.img}
-                  onSave={(val: string) => onEditBanner(active, activeSlide.title, activeSlide.subtitle, val)}
+                  onSave={(val: string) => onEditBanner(active, activeSlide.title, activeSlide.subtitle, val, activeSlide.link)}
                 />
                 <AdminEditButton 
                   itemKey={`hero_banner_title_${activeSlide.id}`}
                   label={`স্লাইডার #${activeSlide.id} প্রধান শিরোনাম`}
                   type="textarea"
                   value={activeSlide.title}
-                  onSave={(val: string) => onEditBanner(active, val, activeSlide.subtitle, activeSlide.img)}
+                  onSave={(val: string) => onEditBanner(active, val, activeSlide.subtitle, activeSlide.img, activeSlide.link)}
                 />
                 <AdminEditButton 
                   itemKey={`hero_banner_sub_${activeSlide.id}`}
                   label={`স্লাইডার #${activeSlide.id} ছোট উপশিরোনাম`}
                   type="textarea"
                   value={activeSlide.subtitle}
-                  onSave={(val: string) => onEditBanner(active, activeSlide.title, val, activeSlide.img)}
+                  onSave={(val: string) => onEditBanner(active, activeSlide.title, val, activeSlide.img, activeSlide.link)}
+                />
+                <AdminEditButton 
+                  itemKey={`hero_banner_link_${activeSlide.id}`}
+                  label={`স্লাইডার #${activeSlide.id} অ্যাকশন লিংক (URL)`}
+                  value={activeSlide.link || ''}
+                  onSave={(val: string) => onEditBanner(active, activeSlide.title, activeSlide.subtitle, activeSlide.img, val)}
                 />
               </div>
             )}
@@ -6921,10 +7259,12 @@ function HeroSlider({ banners, isAdmin, onEditBanner, AdminEditButton }: HeroSli
         {/* Buttons exactly as requested */}
         <div className="flex flex-wrap gap-2.5 pt-2 sm:pt-4">
           <a
-            href="#products-section"
-            className="bg-emerald-800 hover:bg-emerald-950 text-white font-extrabold py-2.5 sm:py-3 px-5 sm:px-7 rounded-xl text-[10px] sm:text-xs transition-all cursor-pointer shadow-md active:scale-95 text-center shrink-0 uppercase tracking-wide"
+            href={activeSlide.link || "#products-section"}
+            target={activeSlide.link ? "_blank" : undefined}
+            rel="noopener noreferrer"
+            className="bg-emerald-800 hover:bg-emerald-950 text-white font-extrabold py-2.5 sm:py-3 px-5 sm:px-7 rounded-xl text-[10px] sm:text-xs transition-all cursor-pointer shadow-md active:scale-95 text-center shrink-0 uppercase tracking-wide animate-pulse"
           >
-            পণ্য কিনুন
+            {activeSlide.link ? 'অফারে ক্লিক করুন' : 'পণ্য কিনুন'}
           </a>
           <a
             href="#combo-basket"
@@ -6933,7 +7273,7 @@ function HeroSlider({ banners, isAdmin, onEditBanner, AdminEditButton }: HeroSli
             সাপ্তাহিক বাস্কেট
           </a>
           <a
-            href={`https://wa.me/8801931355398?text=${encodeURIComponent('সালাম, আমি কৃষক বাজার থেকে সরাসরি তাজা সবজি কম্বো বা বাস্কেট অর্ডার করতে চাই!')}`}
+            href={`https://wa.me/88${GLOBAL_SUPPORT_PHONE_NUMBER}?text=${encodeURIComponent('সালাম, আমি কৃষক বাজার থেকে সরাসরি তাজা সবজি কম্বো বা বাস্কেট অর্ডার করতে চাই!')}`}
             target="_blank"
             rel="noopener noreferrer"
             className="bg-[#25D366] hover:bg-[#20ba5a] text-white font-extrabold py-2.5 sm:py-3 px-5 sm:px-7 rounded-xl text-[10px] sm:text-xs transition-all cursor-pointer shadow-md active:scale-95 flex items-center justify-center gap-1.5 shrink-0"
@@ -6994,6 +7334,8 @@ function ProductDetailsSheet({
   const [editCat, setEditCat] = useState(product.cat);
   const [editDesc, setEditDesc] = useState(product.description || '');
   const [editImg, setEditImg] = useState(product.img);
+  const [editGallery, setEditGallery] = useState(product.gallery ? product.gallery.join(', ') : '');
+  const [editWeightOptions, setEditWeightOptions] = useState(product.weightOptions ? product.weightOptions.join(', ') : '');
 
   // Keep state synced if active product item changes
   useEffect(() => {
@@ -7004,6 +7346,8 @@ function ProductDetailsSheet({
     setEditCat(product.cat);
     setEditDesc(product.description || '');
     setEditImg(product.img);
+    setEditGallery(product.gallery ? product.gallery.join(', ') : '');
+    setEditWeightOptions(product.weightOptions ? product.weightOptions.join(', ') : '');
   }, [product]);
 
   // Generate 4 dynamic gallery options if gallery string array is null
@@ -7120,6 +7464,28 @@ function ProductDetailsSheet({
               </div>
 
               <div className="space-y-1">
+                <label className="text-[10px] font-black text-stone-500 uppercase">প্রোডাক্ট গ্যালারি ইমেজ লিঙ্ক সমূহ (কমা দিয়ে একাধিক URL দিন)</label>
+                <input 
+                  type="text"
+                  value={editGallery}
+                  onChange={e => setEditGallery(e.target.value)}
+                  className="w-full px-3 py-2 bg-stone-50 border rounded-xl outline-none text-xs text-stone-800 font-mono"
+                  placeholder="উদা: URL1, URL2, URL3"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-stone-500 uppercase">ওজন/প্যাকিং প্যাকেট অপশন সমূহ (কমা দিয়ে বিভক্ত)</label>
+                <input 
+                  type="text"
+                  value={editWeightOptions}
+                  onChange={e => setEditWeightOptions(e.target.value)}
+                  className="w-full px-3 py-2 bg-stone-50 border rounded-xl outline-none text-xs text-stone-800 font-sans font-bold"
+                  placeholder="উদা: ৫০০ গ্রাম, ১ কেজি, ২ কেজি"
+                />
+              </div>
+
+              <div className="space-y-1">
                 <label className="text-[10px] font-black text-stone-500 uppercase">ফসল ও গুণের বিস্তারিত বিবরণ (Description)</label>
                 <textarea 
                   value={editDesc}
@@ -7152,6 +7518,15 @@ function ProductDetailsSheet({
                       return;
                     }
                     if (onUpdateProduct) {
+                      // Parse gallery
+                      const galleryArr = editGallery
+                        ? editGallery.split(',').map(s => s.trim()).filter(Boolean)
+                        : [];
+                      // Parse weightOptions
+                      const wOptArr = editWeightOptions
+                        ? editWeightOptions.split(',').map(s => s.trim()).filter(Boolean)
+                        : [];
+
                       await onUpdateProduct({
                         ...product,
                         title: editTitle,
@@ -7159,7 +7534,9 @@ function ProductDetailsSheet({
                         unit: editUnit,
                         cat: editCat,
                         description: editDesc,
-                        img: editImg
+                        img: editImg,
+                        gallery: galleryArr.length > 0 ? galleryArr : undefined,
+                        weightOptions: wOptArr.length > 0 ? wOptArr : undefined
                       });
                       alert('পণ্যটি সফলভাবে পরিবর্তন করা হয়েছে!');
                     }
@@ -7368,6 +7745,25 @@ function OrderForm({
   const [address, setAddress] = useState(customerProfile?.address || '');
   const [notes, setNotes] = useState('');
 
+  // 🎟️ Coupon/Promo validation states
+  const [couponCode, setCouponCode] = useState('');
+  const [couponDiscount, setCouponDiscount] = useState(0);
+  const [couponMessage, setCouponMessage] = useState('');
+
+  const applyCoupon = () => {
+    const code = couponCode.trim().toUpperCase();
+    if (code === 'KRISHOK26' || code === 'KOPON' || code === 'TAZA2026' || code === 'FREE80') {
+      setCouponDiscount(0.10); // 10% discount
+      setCouponMessage('💚 অভিনন্দন! আপনার ১০% ডিসকাউন্ট কোড সফলভাবে যুক্ত হয়েছে।');
+    } else if (code === 'SAVE15') {
+      setCouponDiscount(0.15); // 15% discount
+      setCouponMessage('💚 অসাধারণ! আপনি ১৫% প্রিমিয়াম ছাড় পেয়েছেন।');
+    } else if (code !== '') {
+      setCouponDiscount(0);
+      setCouponMessage('❌ দুঃখিত, এই কুপন কোডটি সঠিক নয় বা এর মেয়াদ শেষ হয়ে গেছে!');
+    }
+  };
+
   // Update fields if customer changes profile / signs in
   useEffect(() => {
     if (customerProfile) {
@@ -7383,7 +7779,8 @@ function OrderForm({
       alert('দয়া করে প্রয়োজনীয় সব ক্ষেত্র পূরণ করুন!');
       return;
     }
-    onSubmit({ name, phone, address, notes });
+    const finalNotes = notes + (couponDiscount > 0 ? ` [কুপন কোড: ${couponCode.toUpperCase()} - ${(couponDiscount * 100)}% ডিসকাউন্ট]` : '');
+    onSubmit({ name, phone, address, notes: finalNotes });
   };
 
   return (
@@ -7470,23 +7867,49 @@ function OrderForm({
         />
       </div>
 
-      <div className="border-t pt-3 flex justify-between items-center bg-stone-50 p-3 rounded-lg border">
+      {/* 🎟️ Coupon/Promo Code Section */}
+      <div className="space-y-1 bg-emerald-50/50 p-3 rounded-xl border border-emerald-200/60 text-left">
+        <label className="text-[9px] text-emerald-800 font-extrabold uppercase block px-1">ডিসকাউন্ট কুপন বা প্রোমোকোড</label>
+        <div className="flex gap-2">
+          <input 
+            type="text"
+            placeholder="উদা: KRISHOK26"
+            value={couponCode}
+            onChange={(e) => setCouponCode(e.target.value)}
+            className="flex-1 px-3 py-1.5 bg-white border border-stone-200 rounded-lg outline-none uppercase font-mono text-[11px] placeholder:normal-case font-bold"
+          />
+          <button 
+            type="button"
+            onClick={applyCoupon}
+            className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white text-[10px] font-bold rounded-lg transition-all cursor-pointer"
+          >
+            প্রয়োগ করুন
+          </button>
+        </div>
+        {couponMessage && (
+          <p className={`text-[10px] mt-1 font-bold ${couponMessage.startsWith('❌') ? 'text-red-600' : 'text-emerald-700'}`}>
+            {couponMessage}
+          </p>
+        )}
+      </div>
+
+      <div className="border-t pt-3 flex justify-between items-center bg-stone-50 p-2.5 rounded-lg border">
         <span className="text-stone-500 text-[10px]">ডেলিভারি চার্জ:</span>
         <span className="text-xs font-black text-stone-800">
           {isHeavyWeight ? 'ফোনে নির্ধারণাধীন' : `৳${currentShippingCost}`}
         </span>
       </div>
 
-      <div className="pt-1 flex justify-between items-center bg-stone-50 p-3 rounded-lg border">
+      <div className="pt-1 flex justify-between items-center bg-stone-50 p-2.5 rounded-lg border">
         <span className="text-stone-500 text-[10px]">অর্ডারে প্রদেয় মোট মূল্য:</span>
-        <span className="text-lg font-black text-amber-600">৳{cartTotal}</span>
+        <span className="text-lg font-black text-amber-600">৳{Math.max(0, Math.round(cartTotal * (1 - couponDiscount)))}</span>
       </div>
 
       <button 
         type="submit"
-        className="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-bold py-3 rounded-xl text-xs transition-all shadow-md mt-4 cursor-pointer"
+        className="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-extrabold py-3 rounded-xl text-xs transition-all shadow-md mt-4 cursor-pointer"
       >
-        অর্ডার কনফার্ম করুন (৳{cartTotal})
+        অর্ডার কনফার্ম করুন (৳{Math.max(0, Math.round(cartTotal * (1 - couponDiscount)))})
       </button>
     </form>
   );
