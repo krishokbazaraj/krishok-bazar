@@ -17,7 +17,7 @@ service cloud.firestore {
     }
     
     function isAdmin() {
-      return isEmailVerified() && request.auth.token.email == "krishokbazar.com@gmail.com";
+      return isSignedIn() && request.auth.token.email == "krishokbazar.com@gmail.com";
     }
 
     function isValidId(id) {
@@ -62,7 +62,7 @@ service cloud.firestore {
     // -------- FARMERS COLLECTION --------
     match /farmers/{farmerId} {
       allow read: if true; // Anyone can view verified farmers on the platform
-      allow create: if isValidFarmer(request.resource.data) && request.resource.data.verified == false; // Pending review
+      allow create: if isAdmin() || (isValidFarmer(request.resource.data) && request.resource.data.verified == false); // Pending review
       allow update: if isAdmin() || isValidFarmer(request.resource.data); // Let farmers update profiles & avatars
       allow delete: if isAdmin();
     }

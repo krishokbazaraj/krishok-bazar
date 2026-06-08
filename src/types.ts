@@ -17,6 +17,7 @@ export interface Product {
   isBestSeller?: boolean;
   approved?: boolean;
   disabled?: boolean;
+  housewife?: string;
 }
 
 export interface Farmer {
@@ -69,6 +70,7 @@ export interface Review {
   rating: number;
   date: string;
   text: string;
+  productId?: number;
 }
 
 export interface HeroBanner {

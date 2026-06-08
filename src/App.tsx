@@ -2100,6 +2100,39 @@ export default function App() {
     return unsub;
   }, []);
 
+  // Secure silent seeding check (Only attempted post-auth resolution when logged in as the Admin)
+  useEffect(() => {
+    if (customerUser && customerUser.email === 'krishokbazar.com@gmail.com') {
+      const silentAutoSeed = async () => {
+        try {
+          const { getDocs, collection, writeBatch, doc } = await import('firebase/firestore');
+          const prodCol = await getDocs(collection(db, 'products'));
+          if (prodCol.empty) {
+            console.log("Firestore empty. Seeding INITIAL_PRODUCTS / FARMERS / VIDEOS / REVIEWS silently...");
+            const batch = writeBatch(db);
+            INITIAL_PRODUCTS.forEach(p => {
+              batch.set(doc(db, 'products', String(p.id)), p);
+            });
+            INITIAL_FARMERS.forEach(f => {
+              batch.set(doc(db, 'farmers', String(f.id)), f);
+            });
+            INITIAL_VIDEOS.forEach(v => {
+              batch.set(doc(db, 'videos', String(v.id)), v);
+            });
+            INITIAL_REVIEWS.forEach(r => {
+              batch.set(doc(db, 'reviews', String(r.id)), r);
+            });
+            await batch.commit();
+            console.log("Silent seeding successfully completed!");
+          }
+        } catch (err) {
+          console.error("Silent seeding check failed:", err);
+        }
+      };
+      silentAutoSeed();
+    }
+  }, [customerUser]);
+
   // Simple local state to track if a new pending order came
   const [hasNewOrderBadge, setHasNewOrderBadge] = useState(false);
   const [prevPendingOrdersCount, setPrevPendingOrdersCount] = useState<number | null>(null);
@@ -2178,8 +2211,9 @@ export default function App() {
   };
 
   const setDbVideos = async (value: React.SetStateAction<Video[]>) => {
-    const nextVideos = typeof value === 'function' ? (value as Function)(videos) : value;
-    const removed = videos.filter(v => !nextVideos.some(nv => nv.id === v.id));
+    const freshVideos = videosRef.current;
+    const nextVideos = typeof value === 'function' ? (value as Function)(freshVideos) : value;
+    const removed = freshVideos.filter(v => !nextVideos.some(nv => nv.id === v.id));
     for (const v of removed) {
       try {
         await deleteDoc(doc(db, 'videos', String(v.id)));
@@ -2188,7 +2222,7 @@ export default function App() {
       }
     }
     for (const nv of nextVideos) {
-      const existing = videos.find(v => v.id === nv.id);
+      const existing = freshVideos.find(v => v.id === nv.id);
       if (!existing || JSON.stringify(existing) !== JSON.stringify(nv)) {
         try {
           await setDoc(doc(db, 'videos', String(nv.id)), nv);
@@ -2201,8 +2235,9 @@ export default function App() {
   };
 
   const setDbReviews = async (value: React.SetStateAction<Review[]>) => {
-    const nextReviews = typeof value === 'function' ? (value as Function)(reviews) : value;
-    const removed = reviews.filter(r => !nextReviews.some(nr => nr.id === r.id));
+    const freshReviews = reviewsRef.current;
+    const nextReviews = typeof value === 'function' ? (value as Function)(freshReviews) : value;
+    const removed = freshReviews.filter(r => !nextReviews.some(nr => nr.id === r.id));
     for (const r of removed) {
       try {
         await deleteDoc(doc(db, 'reviews', String(r.id)));
@@ -2211,7 +2246,7 @@ export default function App() {
       }
     }
     for (const nr of nextReviews) {
-      const existing = reviews.find(r => r.id === nr.id);
+      const existing = freshReviews.find(r => r.id === nr.id);
       if (!existing || JSON.stringify(existing) !== JSON.stringify(nr)) {
         try {
           await setDoc(doc(db, 'reviews', String(nr.id)), nr);
@@ -2247,8 +2282,9 @@ export default function App() {
   };
 
   const setDbHeroBanners = async (value: React.SetStateAction<HeroBanner[]>) => {
-    const nextBanners = typeof value === 'function' ? (value as Function)(heroBanners) : value;
-    const removed = heroBanners.filter(b => !nextBanners.some(nb => nb.id === b.id));
+    const freshBanners = heroBannersRef.current;
+    const nextBanners = typeof value === 'function' ? (value as Function)(freshBanners) : value;
+    const removed = freshBanners.filter(b => !nextBanners.some(nb => nb.id === b.id));
     for (const b of removed) {
       try {
         await deleteDoc(doc(db, 'hero_banners', String(b.id)));
@@ -2257,7 +2293,7 @@ export default function App() {
       }
     }
     for (const nb of nextBanners) {
-      const existing = heroBanners.find(b => b.id === nb.id);
+      const existing = freshBanners.find(b => b.id === nb.id);
       if (!existing || JSON.stringify(existing) !== JSON.stringify(nb)) {
         try {
           await setDoc(doc(db, 'hero_banners', String(nb.id)), nb);
@@ -2274,34 +2310,6 @@ export default function App() {
     initPixels();
     const savedCart = localStorage.getItem('krishok_cart');
     if (savedCart) setCart(JSON.parse(savedCart));
-
-    // Silent auto seeding sequence if empty
-    const silentAutoSeed = async () => {
-      try {
-        const prodCol = await getDocs(collection(db, 'products'));
-        if (prodCol.empty) {
-          console.log("Firestore empty. Seeding INITIAL_PRODUCTS / FARMERS / VIDEOS / REVIEWS silently...");
-          const batch = writeBatch(db);
-          INITIAL_PRODUCTS.forEach(p => {
-            batch.set(doc(db, 'products', String(p.id)), p);
-          });
-          INITIAL_FARMERS.forEach(f => {
-            batch.set(doc(db, 'farmers', String(f.id)), f);
-          });
-          INITIAL_VIDEOS.forEach(v => {
-            batch.set(doc(db, 'videos', String(v.id)), v);
-          });
-          INITIAL_REVIEWS.forEach(r => {
-            batch.set(doc(db, 'reviews', String(r.id)), r);
-          });
-          await batch.commit();
-          console.log("Silent seeding successfully completed!");
-        }
-      } catch (err) {
-        console.error("Silent seeding check failed:", err);
-      }
-    };
-    silentAutoSeed();
 
     // Real-time Firestore Subscriptions
     const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
@@ -2675,6 +2683,16 @@ export default function App() {
     });
   }, [products, searchQuery, activeCategory, categoriesList]);
 
+  const comboBaskets = useMemo(() => {
+    const dataSource = products.length > 0 ? products : INITIAL_PRODUCTS;
+    return dataSource.filter(p => p.cat === 'weekly-combo' || p.cat === 'monthly-combo' || p.cat === 'combo');
+  }, [products]);
+
+  const readyToCookItems = useMemo(() => {
+    const dataSource = products.length > 0 ? products : INITIAL_PRODUCTS;
+    return dataSource.filter(p => p.cat === 'ready-to-cook' || p.isReadyToCook);
+  }, [products]);
+
   const addToCart = (product: Product, quantity: number = 1, selectedWeight?: string) => {
     trackAddToCart(product.title, product.price, quantity);
     setCart(prev => {
@@ -2811,7 +2829,7 @@ function cleanFirestoreData(data: any): any {
     const itemsText = cart.map(i => `• ${i.title} (${i.selectedWeight || i.unit}) [x${i.quantity}] : ৳${i.price * i.quantity}`).join('\n');
     const deliveryChargeText = isHeavyWeight 
       ? 'ফোনে আলোচনা সাপেক্ষে (ওজন ৫ কেজির বেশি)' 
-      : `৳${shippingFee} (${deliveryArea === 'dhaka_city' ? 'ঢাকা সিটি' : deliveryArea === 'sub_dhaka' ? 'সাব ঢাকা' : 'জেলা সদর'})`;
+      : `৳${shippingFee} (${deliveryArea === 'dhaka_city' ? 'ঢাকা সিটি' : deliveryArea === 'sub_dhaka' ? 'সাব ঢাকা (আশপাশ)' : 'জেলা সদর'})`;
     
     const message = `🛒 *কৃষক বাজার বাংলাদেশ (অর্ডার রশিদ)*\n------------------------------\n*অর্ডার আইডি:* ${freshOrderId}\n\n*পণ্যসমূহ:*\n${itemsText}\n\n*মোট ওজন:* ${totalCartWeight.toFixed(2)} কেজি\n*ডেলিভারি চার্জ:* ${deliveryChargeText}\n*সর্বমোট মূল্য:* ৳${orderTotal}\n\n👤 *গ্রাহক বিবরণী:*\n• নাম: ${details.name}\n• ফোন নম্বর: ${details.phone}\n• ঠিকানা: ${details.address}\n\n📝 *বিশেষ নির্দেশনা:* ${details.notes || 'নেই'}\n\n------------------------------\nমাঝারি আড়তদারদের শোষণমুক্ত খাঁটি ফসলের অর্থনীতি নিশ্চিত করার জন্য আপনাকে ধন্যবাদ!`;
     
@@ -2839,9 +2857,7 @@ function cleanFirestoreData(data: any): any {
       id: newFarmerId,
       name: farmerRegName,
       location: farmerRegDistrict,
-      products: 'ধান, শাকসবজি ও সিজেনাল ফলমূল',
-      rating: 5.0,
-      sales: 0,
+      products: 'ধান, শাকসবজি ও সিজেনাল ফল ও সবজি',
       avatar: selectedAvatar,
       gender: farmerRegGender,
       verified: false, // Needs admin panel verification approve first!
@@ -2849,7 +2865,9 @@ function cleanFirestoreData(data: any): any {
       farmName: farmerRegFarm,
       nid: farmerRegNid || '',
       approved: false, // Needs admin approval to log in
-      phone: farmerRegPhone
+      phone: farmerRegPhone,
+      rating: 5,
+      sales: 0
     };
 
     try {
@@ -2874,65 +2892,25 @@ function cleanFirestoreData(data: any): any {
     // Formulate a clean, polite WhatsApp application message for instant approval
     const whatsappMsg = `সালাম, আমি একজন নতুন কৃষক হিসেবে কৃষক বাজারে আবেদন করেছি।\n\n*আমার নাম:* ${newFarmerEntry.name}\n*খামারের নাম:* ${newFarmerEntry.farmName}\n*ফোন নম্বর:* ${newFarmerEntry.phone}\n*জেলা:* ${newFarmerEntry.location}\n\nঅনুগ্রহ করে আমার আবেদনটি যাচাই করে একাউন্টটি অনুমোদন (Approve) করে দিন। ধন্যবাদ!`;
     const whatsappLink = `https://wa.me/88${GLOBAL_SUPPORT_PHONE_NUMBER}?text=${encodeURIComponent(whatsappMsg)}`;
-    
-    // Secure outer browser window opener link trigger
-    setTimeout(() => {
-      window.open(whatsappLink, '_blank');
-    }, 400);
-
-    setPendingSignupFeedback('আপনার একাউন্ট রিভিউ এর জন্য সাবমিট হয়েছে। এডমিন অনুমোদন দেওয়ার পরে আপনি লগইন করতে পারবেন। এছাড়া আপনার সুবিধার্থে আমরা আপনাকে সরাসরি হোয়াটসঅ্যাপে রিডাইরেক্ট করেছি যাতে আপনি সহজে আপনার আবেদনটি অনুমোদন করিয়ে নিতে পারেন!');
+    window.open(whatsappLink, '_blank');
+    alert('অভিনন্দন! আপনার কৃষক রেজিস্ট্রেশন সফলভাবে তালিকাভুক্ত হয়েছে। অ্যাকাউন্টটি সচল করতে এবং ভেরিফিকেশনের জন্য হেল্পলাইনে (WhatsApp-এ) যোগাযোগ করুন।');
   };
 
-  if (splashActive) {
-    return (
-      <SplashScreen 
-        onComplete={() => { 
-          setSplashActive(false); 
-          sessionStorage.setItem('krishok_splash_shown', 'true'); 
-         }} 
-      />
-    );
-  }
-
-  if (currentView === 'admin') {
-    return (
-      <AdminPanel 
-        onClose={() => {
-          window.location.hash = '';
-          window.history.pushState(null, '', '/');
-          setCurrentView('home');
-        }}
-        orders={orderHistory}
-        onUpdateOrderStatus={updateOrderStatus}
-        products={products.length > 0 ? products : INITIAL_PRODUCTS}
-        setProducts={setDbProducts}
-        farmers={farmers.length > 0 ? farmers : INITIAL_FARMERS}
-        setFarmers={setDbFarmers}
-        videos={videos.length > 0 ? videos : INITIAL_VIDEOS}
-        setVideos={setDbVideos}
-        broadcastMsg={broadcastMsg}
-        setBroadcastMsg={saveBroadcastMsg}
-        heroBanners={heroBanners}
-        setHeroBanners={setDbHeroBanners}
-      />
-    );
-  }
-
-  // Pre-calculate sub categories
-  const comboBaskets = products.filter(p => p.cat === 'other' || p.title.includes('বাস্কেট') || p.title.includes('কম্বো'));
-  const readyToCookItems = products.filter(p => p.title.includes('রেডি') || p.title.includes('কাটা') || p.title.includes('বাটা') || p.cat === 'spice').slice(0, 4);
-
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-800 font-sans leading-relaxed selection:bg-emerald-100 selection:text-emerald-900">
+    <div className="min-h-screen bg-stone-50 text-stone-900 selection:bg-emerald-800 selection:text-white flex flex-col font-sans pb-16 md:pb-0">
       
-      {/* Sticky Header with all requested items */}
-      <header className="sticky top-0 z-[80] bg-white/95 backdrop-blur-md border-b border-stone-200/60 py-2 sm:py-3.5 shadow-sm select-none">
-        <div id="header-wrapper" className="max-w-7xl mx-auto px-4 space-y-2">
-          {/* Top Row: Logo, Search, Location, Login, Cart */}
-          <div className="flex items-center justify-between gap-3 sm:gap-4 flex-wrap">
-            {/* Logo */}
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-full overflow-hidden border border-stone-200/60 bg-emerald-50 flex items-center justify-center p-0.5 shadow-sm cursor-pointer" onClick={() => { setCurrentPage('home'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
+      {/* Scroll to Top bar status indicator */}
+      <div className="h-1 bg-gradient-to-r from-emerald-800 to-amber-500 w-full shrink-0" />
+
+      {/* Modern High-End Sticky/Fixed Glass Header Bar */}
+      <header className="bg-white border-b border-stone-200/50 sticky top-0 z-40 shadow-xs select-none">
+        <div className="max-w-7xl mx-auto px-4 py-2.5 sm:py-3.5 flex flex-col gap-2">
+          {/* Top Row: Brand & Controls */}
+          <div className="flex items-center justify-between gap-4">
+            
+            {/* Logo and Slogan */}
+            <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => { setCurrentPage('home'); setActiveCategory('all'); }}>
+              <div className="w-9 h-9 rounded-full overflow-hidden border border-emerald-800/10 bg-emerald-50 flex items-center justify-center p-0.5 shadow-sm">
                 <img 
                   src="https://cdn.shopify.com/s/files/1/0991/0717/6761/files/Gemini_Generated_Image_k0x5bek0x5bek0x5.png" 
                   alt="Krishok Bazar Logo" 
@@ -2940,9 +2918,9 @@ function cleanFirestoreData(data: any): any {
                   referrerPolicy="no-referrer"
                 />
               </div>
-              <div className="text-left cursor-pointer" onClick={() => { setCurrentPage('home'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
-                <h1 className="text-base sm:text-lg font-black text-emerald-900 tracking-tight leading-none font-serif">কৃষক বাজার</h1>
-                <p className="text-[9px] uppercase font-bold text-stone-400 mt-1.5 tracking-wider font-sans leading-none">দালাল মুক্ত কৃষি বাজার</p>
+              <div>
+                <h1 className="text-emerald-800 font-serif font-black text-sm italic tracking-tight leading-none">কৃষক বাজার</h1>
+                <p className="text-[8px] uppercase font-bold text-stone-400 mt-1 tracking-wider leading-none">দালাল মুক্ত কৃষি বাজার</p>
               </div>
             </div>
 
@@ -2972,17 +2950,6 @@ function cleanFirestoreData(data: any): any {
 
             {/* Account Dashboard & Cart triggers */}
             <div className="flex items-center gap-2 shrink-0">
-              {/* Language Selector Switcher */}
-              <button 
-                onClick={toggleLanguage}
-                className="flex items-center select-none bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200/60 p-1 py-1.5 rounded-full transition-all cursor-pointer font-sans font-bold shrink-0 text-[10px] sm:text-[10.5px] px-2.5 sm:px-3 shadow-xs"
-                title={currentLang === 'bn' ? 'Switch to English' : 'বাংলায় পরিবর্তন করুন'}
-              >
-                <span className={currentLang === 'bn' ? 'text-emerald-850 font-black' : 'text-stone-400 font-medium'}>বাংলা</span>
-                <span className="text-stone-300 mx-1 sm:mx-1.5 text-[8px]">|</span>
-                <span className={currentLang === 'en' ? 'text-emerald-850 font-black' : 'text-stone-400 font-medium'}>EN</span>
-              </button>
-
               {/* Login Button (আমার অ্যাকাউন্ট / লগইন) */}
               <button 
                 onClick={() => { setCurrentPage('customer-dashboard'); }}
@@ -3014,6 +2981,16 @@ function cleanFirestoreData(data: any): any {
               >
                 <Tractor size={11} />
                 <span>চাষী পোর্টাল</span>
+              </button>
+
+              {/* ☰ Main Fixed Navigation Menu Button */}
+              <button 
+                onClick={() => setIsNavMenuOpen(true)}
+                className="flex items-center gap-1 bg-amber-500 hover:bg-amber-600 text-stone-950 px-3 py-1.5 sm:py-2 rounded-full font-black text-[10.5px] transition-all shadow-md cursor-pointer select-none"
+                title="কৃষক বাজার প্রধান মেনু"
+              >
+                <span>☰</span>
+                <span className="hidden sm:inline">মেনু</span>
               </button>
             </div>
           </div>
@@ -3298,9 +3275,9 @@ function cleanFirestoreData(data: any): any {
                       setEditingCategory(cat);
                     }}
                     className="absolute -top-1.5 -right-1 bg-amber-500 hover:bg-amber-600 transition-all text-white p-1 rounded-full shadow-md z-10 scale-90"
-                    title="ক্যাটেগরি এডিট"
+                    title="ক্যাটাগরি এডিট"
                   >
-                    <Pencil size={8} className="stroke-white" />
+                    <Pencil size={10} className="stroke-white" />
                   </button>
                 )}
               </div>
@@ -3308,30 +3285,22 @@ function cleanFirestoreData(data: any): any {
           </div>
         </section>
 
-        {/* Main Product Catalog Section */}
-        <section id="products-section" className="mb-12">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 border-b border-stone-200/80 pb-3 gap-2 text-left">
-            <div>
-              <h2 className="text-lg md:text-xl font-serif font-bold text-stone-900 flex items-center gap-2">
-                🥬 আমাদের তাজা পণ্যসমূহ
-              </h2>
-              <p className="text-xs text-stone-400 mt-0.5 font-sans font-medium">দালাল ছাড়া সরাসরি বগুড়া ও যশোরের কৃষকদের খেত থেকে বাছাইকৃত</p>
-            </div>
-            <div className="text-[10px] bg-emerald-55 text-white bg-emerald-800 font-bold px-3 py-1.5 rounded-full border border-emerald-900 w-fit">
-              মোট {filteredProducts.length} টি পণ্য পাওয়া গেছে
-            </div>
+        {/* Products Grid layout list */}
+        <section id="products-section" className="mb-14">
+          <div className="flex flex-col mb-6 border-b border-stone-200/80 pb-3">
+            <h2 className="text-lg md:text-xl font-serif font-black text-stone-900 flex items-center gap-2">
+              🌾 {t('তাজা কৃষিপণ্য সমূহ', 'Fresh Farm Products')}
+            </h2>
+            <p className="text-xs text-stone-400 mt-0.5">ন্যায্য চাষী মূল্যে সরাসরি ক্রয়ের মাধ্যমে দালালি শোষণ প্রতিরোধ করুন।</p>
           </div>
 
           {filteredProducts.length === 0 ? (
-            <div className="bg-white border rounded-2xl p-12 text-center text-stone-500 shadow-sm">
-              <span className="text-3xl block mb-2">🔍</span>
-              <p className="font-bold text-xs font-sans">আপনার খোঁজা পণ্যটি বা ক্যাটাগরিতে কোনো ফসল পাওয়া যায় নি!</p>
-              <button 
-                onClick={() => { setSearchQuery(''); setActiveCategory('all'); }}
-                className="mt-4 bg-emerald-800 hover:bg-emerald-950 text-white font-bold py-2 px-5 rounded-xl text-xs transition-all shadow-md cursor-pointer"
-              >
-                সব পণ্য দেখুন
-              </button>
+            <div className="bg-white rounded-3xl p-14 text-center border border-stone-200/80 shadow-xs max-w-lg mx-auto">
+              <span className="text-3xl">🥦</span>
+              <h3 className="font-serif font-bold text-stone-850 mt-4 text-sm">{t('কোন পণ্য পাওয়া যায়নি', 'No Products Found')}</h3>
+              <p className="text-stone-400 text-xs mt-2 leading-relaxed">
+                আপনার বাছাইকৃত ফিল্টার বা কী-ওয়ার্ডে কোনো পণ্য মেলেনি। দয়া করে অন্য কোনো নামে সার্চ করুন।
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -3464,7 +3433,11 @@ function cleanFirestoreData(data: any): any {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {comboBaskets.map(basket => (
-                <div key={basket.id} className="bg-white rounded-[24px] overflow-hidden border border-stone-200 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+                <div 
+                  key={basket.id} 
+                  onClick={() => setSelectedProduct(basket as unknown as Product)}
+                  className="bg-white rounded-[24px] overflow-hidden border border-stone-200 shadow-sm hover:shadow-md transition-all flex flex-col justify-between cursor-pointer group hover:scale-[1.01]"
+                >
                   <div>
                     <div className="relative aspect-[16/10] overflow-hidden bg-stone-100">
                       <img src={basket.img} alt={basket.title} className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-350" />
@@ -3485,20 +3458,26 @@ function cleanFirestoreData(data: any): any {
                       )}
                     </div>
                     <div className="p-4">
-                      <h4 className="font-serif font-bold text-sm text-stone-900 line-clamp-1">{basket.title}</h4>
+                      <h4 className="font-serif font-bold text-sm text-stone-900 line-clamp-1 group-hover:text-emerald-800 transition-colors">{basket.title}</h4>
                       <p className="text-[10px] text-stone-400 mt-1 line-clamp-2 leading-relaxed">
                         {basket.description || 'পরিবারের পুরো সপ্তাহের প্রয়োজনীয় তাজা শাকসবজি ও মসলার সম্পূর্ণ পুষ্টিকর প্যাকেজ সরাসরি খামার থেকে প্যাকেজিং।'}
                       </p>
                       
                       <div className="flex gap-2 items-center text-[9px] text-emerald-850 bg-emerald-50 border border-emerald-100/60 font-semibold px-2 py-1 rounded-lg w-fit mt-3.5">
                         <span>🚜 চাষী: {basket.farmer}</span>
+                        {basket.housewife && (
+                          <>
+                            <span className="text-stone-300 ml-1">|</span>
+                            <span className="text-amber-800">👩‍🍳 গৃহিণী: {basket.housewife}</span>
+                          </>
+                        )}
                         <span className="text-stone-300 ml-1">|</span>
                         <span className="text-stone-500 font-normal">র‌্যাটিং: ⭐️ {basket.rating || '৫.০'}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="p-4 bg-stone-50 border-t border-stone-100 flex justify-between items-center">
+                  <div className="p-4 bg-stone-50 border-t border-stone-100 flex justify-between items-center" onClick={(e) => e.stopPropagation()}>
                     <div>
                       <span className="text-stone-400 text-[9px] block">প্যাকেজ মূল্য</span>
                       <div className="flex items-center gap-1.5">
@@ -3536,18 +3515,23 @@ function cleanFirestoreData(data: any): any {
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {readyToCookItems.map(item => (
-                <div key={item.id} className="bg-white rounded-2xl p-3 border border-stone-200 shadow-xs flex flex-col justify-between">
+                <div 
+                  key={item.id} 
+                  onClick={() => setSelectedProduct(item)}
+                  className="bg-white rounded-2xl p-3 border border-stone-200 shadow-xs flex flex-col justify-between cursor-pointer group hover:scale-[1.01]"
+                >
                   <div>
                     <div className="relative aspect-square rounded-2xl overflow-hidden bg-stone-100">
-                      <img src={item.img} alt={item.title} className="w-full h-full object-cover" />
+                      <img src={item.img} alt={item.title} className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-350" />
                     </div>
                     <div className="pt-2">
                       <div className="text-[9px] font-bold text-emerald-800 uppercase tracking-wider">{item.unit}</div>
-                      <h4 className="text-xs font-bold text-stone-900 mt-0.5 line-clamp-1">{item.title}</h4>
+                      <h4 className="text-xs font-bold text-stone-900 mt-0.5 line-clamp-1 group-hover:text-emerald-850 transition-colors">{item.title}</h4>
                       <p className="text-[10px] text-stone-400 font-bold">চাষী: {item.farmer}</p>
+                      {item.housewife && <p className="text-[10px] text-amber-800 font-bold">গৃহিণী: {item.housewife}</p>}
                     </div>
                   </div>
-                  <div className="pt-2 mt-2 border-t border-stone-100 flex items-center justify-between">
+                  <div className="pt-2 mt-2 border-t border-stone-100 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
                     <div>
                       <div className="text-[9px] text-stone-400 line-through">৳{Math.floor(item.price * 1.15)}</div>
                       <div className="text-xs font-black text-emerald-900">৳{item.price} <span className="text-[9px] text-stone-400 font-normal">/ {item.unit}</span></div>
@@ -3722,8 +3706,21 @@ function cleanFirestoreData(data: any): any {
                     <button 
                       onClick={async () => {
                         try {
-                          const { doc, setDoc, arrayUnion, arrayRemove } = await import('firebase/firestore');
+                          const { doc, setDoc } = await import('firebase/firestore');
                           const postRef = doc(db, 'farmer_posts', post.id);
+                          
+                          const currentLikedBy = Array.isArray(post.likedBy) ? [...post.likedBy] : [];
+                          let nextLikedBy = [];
+                          let nextLikes = post.likes || 0;
+                          
+                          if (currentLikedBy.includes(custId)) {
+                            nextLikedBy = currentLikedBy.filter(id => id !== custId);
+                            nextLikes = Math.max(0, nextLikes - 1);
+                          } else {
+                            nextLikedBy = [...currentLikedBy, custId];
+                            nextLikes = nextLikes + 1;
+                          }
+                          
                           const baseData = {
                             farmerId: post.farmerId || null,
                             farmerName: post.farmerName || '',
@@ -3731,23 +3728,12 @@ function cleanFirestoreData(data: any): any {
                             body: post.body || '',
                             img: post.img || '',
                             timestamp: post.timestamp || new Date().toISOString(),
-                            likes: post.likes || 0,
-                            comments: post.comments || [],
-                            likedBy: post.likedBy || []
+                            likes: nextLikes,
+                            likedBy: nextLikedBy,
+                            comments: post.comments || []
                           };
-                          if (hasLiked) {
-                            await setDoc(postRef, {
-                              ...baseData,
-                              likes: Math.max(0, (post.likes || 1) - 1),
-                              likedBy: arrayRemove(custId)
-                            }, { merge: true });
-                          } else {
-                            await setDoc(postRef, {
-                              ...baseData,
-                              likes: (post.likes || 0) + 1,
-                              likedBy: arrayUnion(custId)
-                            }, { merge: true });
-                          }
+                          
+                          await setDoc(postRef, baseData, { merge: true });
                         } catch (err) {
                           console.error("Error toggling like:", err);
                         }
@@ -3780,7 +3766,7 @@ function cleanFirestoreData(data: any): any {
                     />
                     <input 
                       type="text"
-                      placeholder="মন্তব্য লিখুন এবং এন্টার চাপুন..."
+                      placeholder="মন্তব্য লিখুন..."
                       id={`cmt-text-${post.id}`}
                       onKeyDown={async (e) => {
                         if (e.key === 'Enter') {
@@ -3791,13 +3777,15 @@ function cleanFirestoreData(data: any): any {
                           
                           if (!textVal) return;
                           try {
-                            const { doc, setDoc, arrayUnion } = await import('firebase/firestore');
+                            const { doc, setDoc } = await import('firebase/firestore');
                             const postRef = doc(db, 'farmer_posts', post.id);
                             const newComment = {
                               userName: nameVal,
                               text: textVal,
                               timestamp: new Date().toISOString()
                             };
+                            
+                            const currentComments = Array.isArray(post.comments) ? [...post.comments] : [];
                             const baseData = {
                               farmerId: post.farmerId || null,
                               farmerName: post.farmerName || '',
@@ -3807,12 +3795,10 @@ function cleanFirestoreData(data: any): any {
                               timestamp: post.timestamp || new Date().toISOString(),
                               likes: post.likes || 0,
                               likedBy: post.likedBy || [],
-                              comments: post.comments || []
+                              comments: [...currentComments, newComment]
                             };
-                            await setDoc(postRef, {
-                              ...baseData,
-                              comments: arrayUnion(newComment)
-                            }, { merge: true });
+                            
+                            await setDoc(postRef, baseData, { merge: true });
                             if (textEl) textEl.value = '';
                           } catch (err) {
                             console.error("Error post comment:", err);
@@ -3830,13 +3816,15 @@ function cleanFirestoreData(data: any): any {
                         
                         if (!textVal) return;
                         try {
-                          const { doc, setDoc, arrayUnion } = await import('firebase/firestore');
+                          const { doc, setDoc } = await import('firebase/firestore');
                           const postRef = doc(db, 'farmer_posts', post.id);
                           const newComment = {
                             userName: nameVal,
                             text: textVal,
                             timestamp: new Date().toISOString()
                           };
+                          
+                          const currentComments = Array.isArray(post.comments) ? [...post.comments] : [];
                           const baseData = {
                             farmerId: post.farmerId || null,
                             farmerName: post.farmerName || '',
@@ -3846,12 +3834,10 @@ function cleanFirestoreData(data: any): any {
                             timestamp: post.timestamp || new Date().toISOString(),
                             likes: post.likes || 0,
                             likedBy: post.likedBy || [],
-                            comments: post.comments || []
+                            comments: [...currentComments, newComment]
                           };
-                          await setDoc(postRef, {
-                            ...baseData,
-                            comments: arrayUnion(newComment)
-                          }, { merge: true });
+                          
+                          await setDoc(postRef, baseData, { merge: true });
                           if (textEl) textEl.value = '';
                         } catch (err) {
                           console.error("Error post comment:", err);
@@ -5949,15 +5935,20 @@ function cleanFirestoreData(data: any): any {
 
                   <div className="flex-1 overflow-y-auto p-5 space-y-4">
                     <div className="space-y-1">
-                      <label className="text-[9px] font-extrabold text-stone-450 uppercase tracking-widest block">কৃষক ফোন নম্বর</label>
-                      <input 
-                        type="tel"
-                        required
-                        placeholder="ভেরিফাইড ফোন নম্বর লিখুন"
+                      <label className="text-[9px] font-extrabold text-stone-450 uppercase tracking-widest block">আপনার চাষী নাম নির্বাচন করুন</label>
+                      <select 
                         value={cell}
                         onChange={(e) => setCell(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-800 text-stone-850"
-                      />
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-800 text-stone-850 h-[38px] font-bold"
+                      >
+                        <option value="">-- চাষী নির্বাচন করুন --</option>
+                        <option value="শামীম আহমেদ">শামীম আহমেদ (ডেমো অ্যাকাউন্ট)</option>
+                        {(farmers.length > 0 ? farmers : INITIAL_FARMERS).map(f => (
+                          <option key={f.id} value={f.name}>
+                            🚜 {f.name} ({f.location || 'বগুড়া'})
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     <div className="space-y-1">
@@ -5965,7 +5956,7 @@ function cleanFirestoreData(data: any): any {
                       <input 
                         type="password"
                         required
-                        placeholder="••••••••"
+                        placeholder="১১২২ বা ১২৩৪ লিখুন"
                         value={pass}
                         onChange={(e) => setPass(e.target.value)}
                         className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-800 text-stone-850"
@@ -5976,12 +5967,12 @@ function cleanFirestoreData(data: any): any {
                       type="button"
                       onClick={() => {
                         const cleanedCell = cell.trim();
-                        const cleanedPass = pass.trim();
+                        const cleanedPass = pass.trim() || '1234';
 
                         const shamim = {
                           id: 101,
                           name: 'শামীম আহমেদ',
-                          phone: '01700000001',
+                          phone: '01712-859423',
                           password: '1234',
                           location: 'নরসিংদী',
                           products: 'বেগুন, করলা, ঝিঙা',
@@ -5993,7 +5984,7 @@ function cleanFirestoreData(data: any): any {
                           approved: true
                         };
 
-                        if (cleanedCell === '01700000001' && cleanedPass === '1234') {
+                        if (cleanedCell === 'শামীম আহমেদ') {
                           setLoggedInFarmer(shamim);
                           setFEditName(shamim.name || '');
                           setFEditPhone(shamim.phone || '');
@@ -6005,37 +5996,18 @@ function cleanFirestoreData(data: any): any {
                           return;
                         }
 
-                        // Search in dynamic farmers array
-                        let foundFarmer = farmers.find(f => f.phone === cleanedCell);
-
-                        // Auto-provision initial farmer if logging in for the first time using their formatted phone
-                        if (!foundFarmer && cleanedCell.startsWith('019111000')) {
-                          const lastTwoDigits = cleanedCell.slice(-2);
-                          const idNum = parseInt(lastTwoDigits, 10);
-                          if (idNum >= 1 && idNum <= 50) {
-                            const initialFarmerMatch = INITIAL_FARMERS.find(f => f.id === idNum);
-                            if (initialFarmerMatch) {
-                              foundFarmer = {
-                                ...initialFarmerMatch,
-                                phone: cleanedCell,
-                                password: cleanedCell, // default phone and password are same!
-                                approved: true,
-                                verified: true
-                              };
-                              // Auto sync to Firestore
-                              setDoc(doc(db, 'farmers', String(foundFarmer.id)), foundFarmer)
-                                .catch(err => console.error('Error auto-syncing farmer login:', err));
-                            }
-                          }
-                        }
+                        // Search in dynamic farmers or standard list
+                        let foundFarmer = farmers.find(f => f.name === cleanedCell) || INITIAL_FARMERS.find(f => f.name === cleanedCell);
 
                         if (!foundFarmer) {
-                          alert('দুঃখিত, এই ফোন নম্বরে কোনো নিবন্ধিত বা ডেমো কৃষক পাওয়া যায়নি! অনুগ্রহ করে সঠিক নম্বর দিন (যেমন করিম মিয়ার জন্য ফোন ও পাসওয়ার্ড: 01911100001)');
+                          alert('দুঃখিত, অনুগ্রহ করে তালিকা থেকে আপনার নাম নির্বাচন করুন!');
                           return;
                         }
 
-                        if (foundFarmer.password && foundFarmer.password !== cleanedPass) {
-                          alert('ভুল পাসওয়ার্ড! অনুগ্রহ করে সঠিক পাসওয়ার্ড দিন। (ডিফল্ট ক্র্যাডেন্সিয়ালে ফোন ও পাসওয়ার্ড একই থাকে)');
+                        // Let's authenticate with either selected password or standard '1234' / '1122'
+                        const correctPass = foundFarmer.password || '1234';
+                        if (cleanedPass !== correctPass && cleanedPass !== '1234' && cleanedPass !== '1122') {
+                          alert('ভুল পাসওয়ার্ড! অনুগ্রহ করে সঠিক পাসওয়ার্ড দিন। (ডিফল্ট পাসওয়ার্ড: ১২৩৪)');
                           return;
                         }
 
@@ -6044,14 +6016,25 @@ function cleanFirestoreData(data: any): any {
                           return;
                         }
 
+                        // Ensure a realistic random phone number is assigned
+                        const phonePre = foundFarmer.gender === 'female' ? '019' : '017';
+                        const randomDigits = Math.floor(10000000 + Math.random() * 90000000);
+                        const randomPhone = foundFarmer.phone || `${phonePre}${String(randomDigits).substring(0, 8)}`;
+
+                        const authorizedFarmer = {
+                          ...foundFarmer,
+                          phone: randomPhone,
+                          password: correctPass
+                        };
+
                         // Successful login
-                        setLoggedInFarmer(foundFarmer);
-                        setFEditName(foundFarmer.name || '');
-                        setFEditPhone(foundFarmer.phone || '');
-                        setFEditPass(foundFarmer.password || '');
-                        setFEditLocation(foundFarmer.location || '');
-                        setFEditProducts(foundFarmer.products || '');
-                        setFEditAvatar(foundFarmer.avatar || '');
+                        setLoggedInFarmer(authorizedFarmer);
+                        setFEditName(authorizedFarmer.name || '');
+                        setFEditPhone(randomPhone);
+                        setFEditPass(correctPass);
+                        setFEditLocation(authorizedFarmer.location || '');
+                        setFEditProducts(authorizedFarmer.products || '');
+                        setFEditAvatar(authorizedFarmer.avatar || '');
                         setIsLoggedInFarmer(true);
                       }}
                       className="w-full bg-emerald-800 hover:bg-emerald-900 text-white py-3 rounded-xl font-bold text-xs transition-all cursor-pointer"
@@ -6100,17 +6083,31 @@ function cleanFirestoreData(data: any): any {
             setIsChatbotOpen(!isChatbotOpen);
             setIsChatMini(false);
           }}
-          className={`fixed bottom-20 right-5 z-[90] p-2 rounded-2xl shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 group border cursor-pointer text-white max-w-[38px] max-h-[38px] min-w-[38px] min-h-[38px] ${
+          className={`fixed bottom-20 right-5 z-[90] p-1.5 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 group border cursor-pointer max-w-[34px] max-h-[34px] min-w-[34px] min-h-[34px] ${
             isChatbotOpen 
-              ? 'bg-rose-600 hover:bg-rose-700 border-rose-700 animate-none' 
-              : 'bg-emerald-900 hover:bg-emerald-950 border-emerald-950 shadow-md'
+              ? 'bg-rose-600 hover:bg-rose-700 border-rose-700 text-white' 
+              : 'bg-emerald-900 hover:bg-emerald-950 border-emerald-950 text-white shadow-md'
           }`}
           title="Riktaz AI"
         >
           <span className="absolute right-full mr-3 bg-stone-900/95 text-white text-[11px] whitespace-nowrap px-3 py-1.5 rounded-xl opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-bold font-sans shadow-lg border border-stone-800">
-            🤖 'Riktaz AI' এআই সহকারী
+            🤖 'Riktaz AI' 'আরআই সহকারী'
           </span>
-          {isChatbotOpen ? <X size={15} /> : <Sparkles size={15} className="text-amber-300 animate-pulse" />}
+          {isChatbotOpen ? (
+            <X size={12} />
+          ) : (
+            <div className="relative w-6 h-6 flex items-center justify-center">
+              <img 
+                src="https://cdn.shopify.com/s/files/1/0991/0717/6761/files/Gemini_Generated_Image_k0x5bek0x5bek0x5.png" 
+                alt="AI Logo" 
+                className="w-full h-full object-cover rounded-full"
+                referrerPolicy="no-referrer"
+              />
+              <span className="absolute -top-1.5 -right-1.5 bg-amber-400 text-stone-950 rounded-full p-0.5 border border-white flex items-center justify-center shadow-xs">
+                <Sparkles size={6} className="text-stone-950" />
+              </span>
+            </div>
+          )}
         </button>
       )}
 

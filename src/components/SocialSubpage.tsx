@@ -4,7 +4,7 @@ import {
   MapPin, Clock, Tractor, ArrowRight, CornerDownRight, CheckCircle2 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { doc, updateDoc, arrayUnion, arrayRemove, collection, addDoc } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, arrayUnion, arrayRemove, collection, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { ImageUploadZone } from './ImageUploadZone';
 
@@ -98,19 +98,32 @@ export default function SocialSubpage({
   const handleToggleLike = async (post: any) => {
     try {
       const postRef = doc(db, 'farmer_posts', post.id);
-      const isLiked = post.likedBy?.includes(visitorId);
-
-      if (isLiked) {
-        await updateDoc(postRef, {
-          likes: Math.max(0, (post.likes || 1) - 1),
-          likedBy: arrayRemove(visitorId)
-        });
+      
+      const currentLikedBy = Array.isArray(post.likedBy) ? [...post.likedBy] : [];
+      let nextLikedBy = [];
+      let nextLikes = post.likes || 0;
+      
+      if (currentLikedBy.includes(visitorId)) {
+        nextLikedBy = currentLikedBy.filter(id => id !== visitorId);
+        nextLikes = Math.max(0, nextLikes - 1);
       } else {
-        await updateDoc(postRef, {
-          likes: (post.likes || 0) + 1,
-          likedBy: arrayUnion(visitorId)
-        });
+        nextLikedBy = [...currentLikedBy, visitorId];
+        nextLikes = nextLikes + 1;
       }
+
+      const baseData = {
+        farmerId: post.farmerId || null,
+        farmerName: post.farmerName || '',
+        farmerAvatar: post.farmerAvatar || '',
+        body: post.body || '',
+        img: post.img || '',
+        timestamp: post.timestamp || new Date().toISOString(),
+        likes: nextLikes,
+        likedBy: nextLikedBy,
+        comments: post.comments || []
+      };
+
+      await setDoc(postRef, baseData, { merge: true });
     } catch (err) {
       console.error('Error toggling like:', err);
     }
@@ -140,10 +153,24 @@ export default function SocialSubpage({
 
     try {
       const postRef = doc(db, 'farmer_posts', postId);
-      await updateDoc(postRef, {
-        comments: arrayUnion(newComment)
-      });
-      setCommentTextState(prev => ({ ...prev, [postId]: '' }));
+      const post = farmerPosts.find(p => p.id === postId);
+      if (post) {
+        const currentComments = Array.isArray(post.comments) ? [...post.comments] : [];
+        const baseData = {
+          farmerId: post.farmerId || null,
+          farmerName: post.farmerName || '',
+          farmerAvatar: post.farmerAvatar || '',
+          body: post.body || '',
+          img: post.img || '',
+          timestamp: post.timestamp || new Date().toISOString(),
+          likes: post.likes || 0,
+          likedBy: post.likedBy || [],
+          comments: [...currentComments, newComment]
+        };
+
+        await setDoc(postRef, baseData, { merge: true });
+        setCommentTextState(prev => ({ ...prev, [postId]: '' }));
+      }
     } catch (err) {
       console.error('Error post comment:', err);
     }
