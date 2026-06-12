@@ -18,7 +18,8 @@
         "description": { "type": "string" },
         "rating": { "type": "number" },
         "weightOptions": { "type": "array" },
-        "isBestSeller": { "type": "boolean" }
+        "isBestSeller": { "type": "boolean" },
+        "availableSoon": { "type": "boolean", "description": "Flag to mark upcoming harvest that can be pre-ordered" }
       },
       "required": ["id", "title", "slug", "price", "unit", "cat", "farmer", "farmerId", "img"]
     },

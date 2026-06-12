@@ -396,6 +396,34 @@ export default function AdminPanel({
     setPassword('');
   };
 
+// Helper to convert standard Google Drive and Dropbox share links into direct embedded static images
+function convertGoogleDriveUrl(url: string): string {
+  if (!url) return '';
+  let trimmed = url.trim();
+
+  // 1. Google Drive Links (supports optional multi-account /u/0/ and /u/1/ prefixes)
+  const dMatch = trimmed.match(/\/file\/(?:u\/\d+\/)?d\/([a-zA-Z0-9_-]+)/);
+  if (dMatch && dMatch[1]) {
+    return `https://lh3.googleusercontent.com/d/${dMatch[1]}`;
+  }
+  const idMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (idMatch && idMatch[1]) {
+    return `https://lh3.googleusercontent.com/d/${idMatch[1]}`;
+  }
+
+  // 2. Dropbox Links
+  if (trimmed.includes('dropbox.com')) {
+    let converted = trimmed.replace('www.dropbox.com', 'dl.dropboxusercontent.com');
+    converted = converted.replace('?dl=0', '?raw=1').replace('?dl=1', '?raw=1');
+    if (!converted.includes('?raw=1') && !converted.includes('&raw=1')) {
+      converted += (converted.includes('?') ? '&' : '?') + 'raw=1';
+    }
+    return converted;
+  }
+
+  return trimmed;
+}
+
   // Product CRUD states
   const [pTitle, setPTitle] = useState('');
   const [pPrice, setPPrice] = useState(0);
@@ -403,16 +431,28 @@ export default function AdminPanel({
   const [pCat, setPCat] = useState<'all' | 'vege' | 'leafy' | 'fruit' | 'fish' | 'rice' | 'egg' | 'milk' | 'honey' | 'spice' | 'other'>('vege');
   const [pFarmer, setPFarmer] = useState('');
   const [pFarmerId, setPFarmerId] = useState<number>(1);
-  const [pImg, setPImg] = useState('');
+  const [pPhoto1, setPPhoto1] = useState('');
+  const [pPhoto2, setPPhoto2] = useState('');
+  const [pPhoto3, setPPhoto3] = useState('');
+  const [pPhoto4, setPPhoto4] = useState('');
+  const [pPhoto5, setPPhoto5] = useState('');
   const [pDesc, setPDesc] = useState('');
   const [pRating, setPRating] = useState(4.8);
-  const [pGallery, setPGallery] = useState('');
   const [pWeightOpts, setPWeightOpts] = useState('৫০০ গ্রাম, ১ কেজি, ২ কেজি');
+  const [pAvailableSoon, setPAvailableSoon] = useState(false);
   const [pEditId, setPEditId] = useState<number | null>(null);
 
   const saveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pTitle || pPrice <= 0) return;
+    
+    if (!pTitle || !pTitle.trim()) {
+      alert('দয়া করে পণ্যের একটি সঠিক নাম লিখুন!');
+      return;
+    }
+    if (pPrice <= 0) {
+      alert('দয়া করে পণ্যের সঠিক মূল্য (০ এর বেশি) নির্ধারণ করুন!');
+      return;
+    }
 
     const computedSlug = pTitle
       .toLowerCase()
@@ -421,9 +461,12 @@ export default function AdminPanel({
       .filter(Boolean)
       .join('-') || `product-${Math.floor(Math.random() * 10000)}`;
 
-    const computedGallery = pGallery
-      ? pGallery.split(',').map(s => s.trim()).filter(Boolean)
-      : [pImg || 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&q=80&w=400'];
+    const fullGallery = [pPhoto1, pPhoto2, pPhoto3, pPhoto4, pPhoto5]
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    const primaryImg = pPhoto1.trim() || fullGallery[0] || 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&q=80&w=400';
+    const computedGallery = fullGallery.length > 0 ? fullGallery : [primaryImg];
 
     const computedWeightOpts = pWeightOpts
       ? pWeightOpts.split(',').map(s => s.trim()).filter(Boolean)
@@ -444,15 +487,18 @@ export default function AdminPanel({
           cat: pCat as any,
           farmer: farmerObj ? farmerObj.name : (pFarmer || 'নিজস্ব খামার'),
           farmerId: farmerObj ? farmerObj.id : Number(pFarmerId),
-          img: pImg || 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&q=80&w=400',
+          img: primaryImg,
           gallery: computedGallery,
           description: pDesc || existingProduct?.description || '',
           rating: Number(pRating) || existingProduct?.rating || 4.8,
-          weightOptions: computedWeightOpts
+          weightOptions: computedWeightOpts,
+          availableSoon: pAvailableSoon,
+          approved: true
         };
         await setDoc(doc(db, 'products', String(pEditId)), updatedProduct);
         setProducts(prev => prev.map(p => p.id === pEditId ? updatedProduct : p));
         addLog(`পণ্য আপডেট করা হয়েছে: ${pTitle} (৳${pPrice}/${pUnit})`);
+        alert('পণ্যটি সফলভাবে আপডেট করা হয়েছে এবং সরাসরি লাইভ করা হয়েছে!');
         setPEditId(null);
       } else {
         // Add
@@ -466,15 +512,18 @@ export default function AdminPanel({
           cat: pCat as any,
           farmer: farmerObj ? farmerObj.name : (pFarmer || 'নিজস্ব খামার'),
           farmerId: farmerObj ? farmerObj.id : Number(pFarmerId),
-          img: pImg || 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&q=80&w=400',
+          img: primaryImg,
           gallery: computedGallery,
           description: pDesc || `কৃষক বাজার সরাসরি গ্রাহক সম্পর্কের উদাহরণ। এই ${pTitle} সম্পূর্ণ প্রাকৃতিকভাবে বা জৈব সারে চাষ করা হয়েছে।`,
           rating: Number(pRating) || 4.8,
-          weightOptions: computedWeightOpts
+          weightOptions: computedWeightOpts,
+          availableSoon: pAvailableSoon,
+          approved: true
         };
         await setDoc(doc(db, 'products', String(newId)), newP);
         setProducts(prev => [...prev, newP]);
         addLog(`নতুন পণ্য আপলোড করা হয়েছে: ${pTitle} (৳${pPrice}/${pUnit})`);
+        alert('নতুন পণ্যটি সফলভাবে আমাদের ডাটাবেসে সেভ করা হয়েছে এবং হোমপেজে যুক্ত করা হয়েছে!');
       }
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `products/${pEditId || 'new'}`);
@@ -487,11 +536,15 @@ export default function AdminPanel({
     setPUnit('কেজি');
     setPFarmer('');
     setPFarmerId(1);
-    setPImg('');
+    setPPhoto1('');
+    setPPhoto2('');
+    setPPhoto3('');
+    setPPhoto4('');
+    setPPhoto5('');
     setPDesc('');
     setPRating(4.8);
-    setPGallery('');
     setPWeightOpts('৫০০ গ্রাম, ১ কেজি, ২ কেজি');
+    setPAvailableSoon(false);
   };
 
   const deleteProduct = async (id: number, title: string) => {
@@ -1390,21 +1443,136 @@ export default function AdminPanel({
                           ))}
                         </select>
                       </div>
-                      <div className="space-y-1">
-                        <ImageUploadZone 
-                          label="পণ্যের প্রধান ছবি সরাসরি আপলোড করুন (Direct Image Upload)"
-                          initialImage={pImg}
-                          onImageUploaded={(b64) => setPImg(b64)}
-                        />
-                        <div className="pt-1.5 select-none">
-                          <label className="text-[9px] font-bold text-stone-400 block mb-0.5">অথবা ওযেব ছবি লিংক / URL পেস্ট করুন:</label>
-                          <input 
-                            type="text" 
-                            placeholder="Unsplash / CDN image link"
-                            className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg outline-none text-[11px] text-stone-700 focus:ring-1 focus:ring-emerald-700"
-                            value={pImg}
-                            onChange={e => setPImg(e.target.value)}
-                          />
+                      <div className="bg-stone-50 p-4 border border-stone-200 rounded-2xl md:col-span-2 space-y-4 text-left">
+                        <h4 className="text-xs font-serif font-black text-emerald-950 flex items-center gap-1">
+                          <span>📸 পণ্যের ছবি ৪টি পৃথক লিঙ্ক ও আপলোড অপশন (Four Photo Links & Uploads)</span>
+                        </h4>
+                        
+                        <div className="grid md:grid-cols-2 gap-4">
+                          {/* Photo 1 */}
+                          <div className="bg-white p-3 border border-stone-150 rounded-xl space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] font-extrabold text-emerald-850 uppercase">১ম ছবি (প্রধান ছবি) - Photo 1 *</span>
+                              {pPhoto1 && (
+                                <button type="button" onClick={() => setPPhoto1('')} className="text-[9px] font-bold text-red-500 hover:text-red-700">মুছে ফেলুন</button>
+                              )}
+                            </div>
+                            <ImageUploadZone
+                              label=""
+                              initialImage={pPhoto1}
+                              onImageUploaded={(b64) => setPPhoto1(b64)}
+                            />
+                            <div className="pt-1 select-none">
+                              <label className="text-[9px] font-bold text-stone-400 block mb-0.5">অথবা ১ম ছবির লিংক / Google Drive লিংক:</label>
+                              <input 
+                                type="text"
+                                value={pPhoto1}
+                                onChange={e => setPPhoto1(convertGoogleDriveUrl(e.target.value))}
+                                placeholder="পদ্ধতি: https://drive.google.com/..."
+                                className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg outline-none text-[11px] text-stone-700 font-mono focus:ring-1 focus:ring-emerald-700"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Photo 2 */}
+                          <div className="bg-white p-3 border border-stone-150 rounded-xl space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] font-extrabold text-stone-500 uppercase">২য় ছবি - Photo 2 (Gallery)</span>
+                              {pPhoto2 && (
+                                <button type="button" onClick={() => setPPhoto2('')} className="text-[9px] font-bold text-red-500 hover:text-red-700">মুছে ফেলুন</button>
+                              )}
+                            </div>
+                            <ImageUploadZone
+                              label=""
+                              initialImage={pPhoto2}
+                              onImageUploaded={(b64) => setPPhoto2(b64)}
+                            />
+                            <div className="pt-1 select-none">
+                              <label className="text-[9px] font-bold text-stone-400 block mb-0.5">অথবা ২য় ছবির লিংক / Google Drive লিংক:</label>
+                              <input 
+                                type="text"
+                                value={pPhoto2}
+                                onChange={e => setPPhoto2(convertGoogleDriveUrl(e.target.value))}
+                                placeholder="পদ্ধতি: https://drive.google.com/..."
+                                className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg outline-none text-[11px] text-stone-700 font-mono focus:ring-1 focus:ring-emerald-700"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Photo 3 */}
+                          <div className="bg-white p-3 border border-stone-150 rounded-xl space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] font-extrabold text-stone-500 uppercase">৩য় ছবি - Photo 3 (Gallery)</span>
+                              {pPhoto3 && (
+                                <button type="button" onClick={() => setPPhoto3('')} className="text-[9px] font-bold text-red-500 hover:text-red-700">মুছে ফেলুন</button>
+                              )}
+                            </div>
+                            <ImageUploadZone
+                              label=""
+                              initialImage={pPhoto3}
+                              onImageUploaded={(b64) => setPPhoto3(b64)}
+                            />
+                            <div className="pt-1 select-none">
+                              <label className="text-[9px] font-bold text-stone-400 block mb-0.5">অথবা ৩য় ছবির লিংক / Google Drive লিংক:</label>
+                              <input 
+                                type="text"
+                                value={pPhoto3}
+                                onChange={e => setPPhoto3(convertGoogleDriveUrl(e.target.value))}
+                                placeholder="পদ্ধতি: https://drive.google.com/..."
+                                className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg outline-none text-[11px] text-stone-700 font-mono focus:ring-1 focus:ring-emerald-700"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Photo 4 */}
+                          <div className="bg-white p-3 border border-stone-150 rounded-xl space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] font-extrabold text-stone-500 uppercase">৪র্থ ছবি - Photo 4 (Gallery)</span>
+                              {pPhoto4 && (
+                                <button type="button" onClick={() => setPPhoto4('')} className="text-[9px] font-bold text-red-500 hover:text-red-700">মুছে ফেলুন</button>
+                              )}
+                            </div>
+                            <ImageUploadZone
+                              label=""
+                              initialImage={pPhoto4}
+                              onImageUploaded={(b64) => setPPhoto4(b64)}
+                            />
+                            <div className="pt-1 select-none">
+                              <label className="text-[9px] font-bold text-stone-400 block mb-0.5">অথবা ৪র্থ ছবির লিংক / Google Drive লিংক:</label>
+                              <input 
+                                type="text"
+                                value={pPhoto4}
+                                onChange={e => setPPhoto4(convertGoogleDriveUrl(e.target.value))}
+                                placeholder="পদ্ধতি: https://drive.google.com/..."
+                                className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg outline-none text-[11px] text-stone-700 font-mono focus:ring-1 focus:ring-emerald-700"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Photo 5 */}
+                          <div className="bg-white p-3 border border-stone-150 rounded-xl space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] font-extrabold text-stone-500 uppercase">৫ম ছবি - Photo 5 (Gallery)</span>
+                              {pPhoto5 && (
+                                <button type="button" onClick={() => setPPhoto5('')} className="text-[9px] font-bold text-red-500 hover:text-red-700">মুছে ফেলুন</button>
+                              )}
+                            </div>
+                            <ImageUploadZone
+                              label=""
+                              initialImage={pPhoto5}
+                              onImageUploaded={(b64) => setPPhoto5(b64)}
+                            />
+                            <div className="pt-1 select-none">
+                              <label className="text-[9px] font-bold text-stone-400 block mb-0.5">অথবা ৫ম ছবির লিংক / Google Drive লিংক:</label>
+                              <input 
+                                type="text"
+                                value={pPhoto5}
+                                onChange={e => setPPhoto5(convertGoogleDriveUrl(e.target.value))}
+                                placeholder="পদ্ধতি: https://drive.google.com/..."
+                                className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg outline-none text-[11px] text-stone-700 font-mono focus:ring-1 focus:ring-emerald-700"
+                              />
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1421,23 +1589,6 @@ export default function AdminPanel({
                           value={pRating}
                           onChange={e => setPRating(Number(e.target.value))}
                         />
-                      </div>
-                      <div className="space-y-1 md:col-span-2">
-                        <MultiImageUploadZone 
-                          label="পণ্যের ২য়, ৩য় বা অতিরিক্ত গ্যালারি ছবিসমূহ সিলেক্ট করুন (Direct Multi Up)"
-                          initialImages={pGallery ? pGallery.split(',').map(s => s.trim()).filter(Boolean) : []}
-                          onImagesChanged={(images) => setPGallery(images.join(', '))}
-                        />
-                        <div className="pt-1.5 select-none">
-                          <label className="text-[9px] font-bold text-stone-400 block mb-0.5">অথবা কমা (,) দিয়ে গ্যালারি ছবির লিঙ্ক / URL পেস্ট করুন:</label>
-                          <input 
-                            type="text" 
-                            placeholder="URL 1, URL 2, URL 3"
-                            className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg outline-none text-[11px] text-stone-700 focus:ring-1 focus:ring-emerald-700"
-                            value={pGallery}
-                            onChange={e => setPGallery(e.target.value)}
-                          />
-                        </div>
                       </div>
                     </div>
 
@@ -1463,6 +1614,19 @@ export default function AdminPanel({
                       </div>
                     </div>
 
+                    <div className="flex items-center gap-2 py-1 bg-amber-50/50 p-3 rounded-lg border border-amber-100/60 w-fit select-none">
+                      <input 
+                        type="checkbox" 
+                        id="adminPAvailableSoon"
+                        className="w-4 h-4 text-emerald-800 border-stone-300 rounded focus:ring-emerald-500 accent-emerald-800 cursor-pointer"
+                        checked={pAvailableSoon}
+                        onChange={e => setPAvailableSoon(e.target.checked)}
+                      />
+                      <label htmlFor="adminPAvailableSoon" className="text-xs font-bold text-stone-700 cursor-pointer">
+                        🌾 নতুন ফসল আসার অপেক্ষায় (Available Soon / Pre-orderable) - এটি সক্রিয় করলে পণ্যটিতে 'Available Soon' ট্যাগ দেখাবে ও প্রি-অর্ডার হবে
+                      </label>
+                    </div>
+
                     <div className="pt-2 flex gap-2">
                       <button 
                         type="submit"
@@ -1480,10 +1644,10 @@ export default function AdminPanel({
                             setPUnit('কেজি');
                             setPFarmer('');
                             setPFarmerId(1);
-                            setPImg('');
-                            setPDesc('');
-                            setPRating(4.8);
-                            setPGallery('');
+                            setPPhoto1('');
+                            setPPhoto2('');
+                            setPPhoto3('');
+                            setPPhoto4('');
                             setPWeightOpts('৫০০ গ্রাম, ১ কেজি, ২ কেজি');
                           }}
                           className="bg-stone-200 text-stone-700 font-bold px-6 py-3 rounded-xl hover:bg-stone-300 transition-all text-xs"
@@ -1574,11 +1738,19 @@ export default function AdminPanel({
                                     setPCat(p.cat);
                                     setPFarmer(p.farmer);
                                     setPFarmerId(p.farmerId || 1);
-                                    setPImg(p.img);
+                                    setPPhoto1(p.img || '');
+                                    let gOffset = 0;
+                                    if (p.gallery && p.gallery.length > 0 && p.gallery[0] === p.img) {
+                                      gOffset = 1;
+                                    }
+                                    setPPhoto2(p.gallery?.[gOffset] || '');
+                                    setPPhoto3(p.gallery?.[gOffset + 1] || '');
+                                    setPPhoto4(p.gallery?.[gOffset + 2] || '');
+                                    setPPhoto5(p.gallery?.[gOffset + 3] || '');
                                     setPDesc(p.description || '');
                                     setPRating(p.rating || 4.8);
-                                    setPGallery(p.gallery ? p.gallery.join(', ') : p.img);
                                     setPWeightOpts(p.weightOptions ? p.weightOptions.join(', ') : '৫০০ গ্রাম, ১ কেজি, ২ কেজি');
+                                    setPAvailableSoon(!!p.availableSoon);
                                   }}
                                   className="p-1 px-2.5 rounded bg-amber-50 text-amber-750 hover:bg-amber-100 border border-amber-200"
                                 >

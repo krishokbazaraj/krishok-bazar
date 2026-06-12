@@ -18,6 +18,8 @@ export interface Product {
   approved?: boolean;
   disabled?: boolean;
   housewife?: string;
+  availableSoon?: boolean;
+  specs?: string[];
 }
 
 export interface Farmer {
@@ -32,6 +34,7 @@ export interface Farmer {
   verified: boolean;
   password?: string;
   farmName?: string;
+  bio?: string;
   nid?: string;
   approved?: boolean;
   phone?: string;

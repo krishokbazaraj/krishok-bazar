@@ -1,22 +1,22 @@
 {
-  "name": "Krishok Bazar (কৃষক বাজার)",
-  "short_name": "KrishokBazar",
-  "description": "Professional Direct Farmer-to-Kitchen Agricultural Marketplace in Bangladesh",
+  "name": "কৃষক বাজার",
+  "short_name": "কৃষক বাজার",
   "start_url": "/",
   "display": "standalone",
-  "orientation": "any",
-  "theme_color": "#1B5E20",
   "background_color": "#ffffff",
+  "theme_color": "#000000",
   "icons": [
     {
-      "src": "https://cdn.shopify.com/s/files/1/0991/0717/6761/files/Gemini_Generated_Image_k0x5bek0x5bek0x5.png",
+      "src": "/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "https://cdn.shopify.com/s/files/1/0991/0717/6761/files/Gemini_Generated_Image_k0x5bek0x5bek0x5.png",
+      "src": "/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

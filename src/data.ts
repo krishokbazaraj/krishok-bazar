@@ -245,6 +245,122 @@ const RAW_PRODUCTS_METADATA = [
     { title: 'অর্গানিক মাশরুম পাউডার', slug: 'mushroom-powder', price: 240, unit: 'প্যাক', farmerId: 26, img: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=400', weightOptions: ['১০০ গ্রাম'] },
     { title: 'সিলেটের খাঁটি গ্রিন টি', slug: 'sylhet-green-tea', price: 190, unit: 'প্যাক', farmerId: 25, img: 'https://images.unsplash.com/photo-1508020963904-3fea3788a45a?auto=format&fit=crop&q=80&w=400', weightOptions: ['১০০ গ্রাম', '২৫০ গ্রাম'] },
     { title: 'হাতে বাটা অর্গানিক হলুদ বাটা', slug: 'organic-turmeric-paste', price: 150, unit: 'জার', farmerId: 43, img: 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&q=80&w=400', weightOptions: ['২৫০ গ্রাম'] }
+  ]},
+
+  // --- Category: WEEKLY COMBO (weekly-combo) - 4 items ---
+  { cat: 'weekly-combo', items: [
+    { 
+      title: 'সাপ্তাহিক লাইট কাম্বো প্যাক (৳৫০০)', 
+      slug: 'weekly-light-basket', 
+      price: 500, 
+      unit: 'প্যাকেজ', 
+      farmerId: 27, 
+      img: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=600', 
+      weightOptions: ['১ বাস্কেট (বাজেট প্যাক)'], 
+      best: false,
+      gallery: [
+        'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=600',
+        'https://images.unsplash.com/photo-1610348725531-843dff14a9da?auto=format&fit=crop&q=80&w=600',
+        'https://images.unsplash.com/photo-1595855759920-86582396756a?auto=format&fit=crop&q=80&w=600',
+        'https://images.unsplash.com/photo-1506477331477-33d5d8b3dc85?auto=format&fit=crop&q=80&w=600',
+        'https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&q=80&w=600'
+      ],
+      specs: [
+        'আলু (৩ কেজি)',
+        'দেশি পেঁয়াজ (১ কেজি)',
+        'রসুন (২৫০ গ্রাম)',
+        'কাঁচামরিচ (২৫০ গ্রাম)',
+        'তাজা লাল শাক (১ আটি)'
+      ]
+    },
+    { 
+      title: 'সাপ্তাহিক স্ট্যান্ডার্ড কম্বো প্যাক (৳১০০০)', 
+      slug: 'weekly-standard-basket', 
+      price: 1000, 
+      unit: 'প্যাকেজ', 
+      farmerId: 3, 
+      img: 'https://images.unsplash.com/photo-1610348725531-843dff14a9da?auto=format&fit=crop&q=80&w=600', 
+      weightOptions: ['১ বাস্কেট (স্ট্যান্ডার্ড)'], 
+      best: true,
+      gallery: [
+        'https://images.unsplash.com/photo-1610348725531-843dff14a9da?auto=format&fit=crop&q=80&w=600',
+        'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=600',
+        'https://images.unsplash.com/photo-1595855759920-86582396756a?auto=format&fit=crop&q=80&w=600',
+        'https://images.unsplash.com/photo-1506477331477-33d5d8b3dc85?auto=format&fit=crop&q=80&w=600',
+        'https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&q=80&w=600'
+      ],
+      specs: [
+        'আলু (৫ কেজি)',
+        'দেশি পেঁয়াজ (২ কেজি)',
+        'রসুন (৫০০ গ্রাম)',
+        'কাঁচা আদা (৫০০ গ্রাম)',
+        'তাজা গোল বেগুন (১ কেজি)',
+        'পালং শাক (২ আটি)',
+        'কাঁচামরিচ (৫০০ গ্রাম)',
+        'মিষ্টি কুমড়া (১ পিস)'
+      ]
+    },
+    { 
+      title: 'সাপ্তাহিক প্রিমিয়াম ফ্যামিলি কম্বো (৳১৫০০)', 
+      slug: 'weekly-premium-basket', 
+      price: 1500, 
+      unit: 'প্যাকেজ', 
+      farmerId: 2, 
+      img: 'https://images.unsplash.com/photo-1506477331477-33d5d8b3dc85?auto=format&fit=crop&q=80&w=600', 
+      weightOptions: ['১ বাস্কেট (প্রিমিয়াম)'], 
+      best: true,
+      gallery: [
+        'https://images.unsplash.com/photo-1506477331477-33d5d8b3dc85?auto=format&fit=crop&q=80&w=600',
+        'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=600',
+        'https://images.unsplash.com/photo-1610348725531-843dff14a9da?auto=format&fit=crop&q=80&w=600',
+        'https://images.unsplash.com/photo-1595855759920-86582396756a?auto=format&fit=crop&q=80&w=600',
+        'https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&q=80&w=600'
+      ],
+      specs: [
+        'আলু (৭ কেজি)',
+        'দেশি পেঁয়াজ (৩ কেজি)',
+        'রসুন (১ কেজি)',
+        'কাঁচা আদা (১ কেজি)',
+        'তাজা গোল বেগুন (১.৫ কেজি)',
+        'অর্গানিক ফুলকপি (২ পিস)',
+        'বাঁধাকপি (২ পিস)',
+        'লাল ও পালং শাক (৫ আটি)',
+        'কাঁচামরিচ (৫০০ গ্রাম)',
+        'তাজা লাল টমেটো (২ কেজি)',
+        'কচি লাউ (১ পিস)'
+      ]
+    },
+    { 
+      title: 'সাপ্তাহিক মেগা লাক্সারি কম্বো (৳২০০০)', 
+      slug: 'weekly-mega-basket', 
+      price: 2000, 
+      unit: 'প্যাকেজ', 
+      farmerId: 1, 
+      img: 'https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&q=80&w=600', 
+      weightOptions: ['১ বাস্কেট (মেগা লাক্সারি)'], 
+      best: false,
+      gallery: [
+        'https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&q=80&w=600',
+        'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=600',
+        'https://images.unsplash.com/photo-1610348725531-843dff14a9da?auto=format&fit=crop&q=80&w=600',
+        'https://images.unsplash.com/photo-1595855759920-86582396756a?auto=format&fit=crop&q=80&w=600',
+        'https://images.unsplash.com/photo-1506477331477-33d5d8b3dc85?auto=format&fit=crop&q=80&w=600'
+      ],
+      specs: [
+        'আলু (১০ কেজি)',
+        'দেশি পেঁয়াজ (৫ কেজি)',
+        'রসুন (১.৫ কেজি)',
+        'কাঁচা আদা (১.৫ কেজি)',
+        'তাজা গোল বেগুন (২ কেজি)',
+        'জলপাইগুড়ির কচি লাউ (২ পিস)',
+        'অর্গানিক ফুলকপি (৪ পিস)',
+        'তাজা লাল টমেটো (৩ কেজি)',
+        'লাল ও পালং শাক (৮ আটি)',
+        'কাঁচামরিচ (১ কেজি)',
+        'কাগজি লেবু (১ হালি)',
+        'উপহার: দেশি গাভীর খাঁটি ঘি (২৫০ গ্রাম)'
+      ]
+    }
   ]}
 ];
 
@@ -272,13 +388,14 @@ const generateProducts = (): Product[] => {
         farmerId: farmerObj.id,
         img: item.img,
         // High fidelity gallery with 3 additional variations/closeups to maintain high premium standard
-        gallery: [
+        gallery: (item as any).gallery || [
           item.img,
           item.img.replace('q=80', 'q=80&sat=-15'), // custom saturation shifts for different view feel
           item.img.replace('q=80', 'q=80&contrast=110'),
           item.img.replace('q=80', 'q=80&brightness=95')
         ],
         description: customDescription,
+        specs: (item as any).specs || [],
         // Generating premium ratings between 4.5 and 5.0
         rating: Number((4.5 + Math.random() * 0.5).toFixed(1)),
         weightOptions: item.weightOptions || ['৫০০ গ্রাম', '১ কেজি', '২ কেজি'],

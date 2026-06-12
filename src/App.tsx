@@ -8,7 +8,6 @@ import {
   ShoppingCart, 
   Tractor, 
   UserPlus, 
-  Search, 
   MessageCircle, 
   CheckCircle, 
   Star, 
@@ -443,8 +442,18 @@ export const ChatProductCard: React.FC<{
           alt={product.title} 
           className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" 
         />
-        {product.isBestSeller && (
+        {product.availableSoon && (
+          <span className="absolute top-1 left-1 bg-indigo-600 text-white text-[6.5px] font-extrabold px-1.5 py-0.5 rounded-full select-none border border-indigo-400">
+            ⏳ আসছে শীঘ্রই
+          </span>
+        )}
+        {product.isBestSeller && !product.availableSoon && (
           <span className="absolute top-1 left-1 bg-amber-500 text-stone-900 text-[6.5px] font-extrabold px-1 py-0.5 rounded-full select-none uppercase tracking-wider">
+            সেরা বিক্রয়
+          </span>
+        )}
+        {product.isBestSeller && product.availableSoon && (
+          <span className="absolute top-5 left-1 bg-amber-500 text-stone-900 text-[6.5px] font-extrabold px-1 py-0.5 rounded-full select-none uppercase tracking-wider">
             সেরা বিক্রয়
           </span>
         )}
@@ -478,10 +487,12 @@ export const ChatProductCard: React.FC<{
           className={`w-full py-1.5 rounded-lg text-[8.5px] font-sans font-extrabold transition-all border flex items-center justify-center gap-1 cursor-pointer ${
             added 
               ? 'bg-emerald-50 text-emerald-800 border-emerald-300' 
-              : 'bg-emerald-800 hover:bg-emerald-950 text-white border-emerald-850 shadow-xs'
+              : product.availableSoon
+                ? 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-650 shadow-xs'
+                : 'bg-emerald-800 hover:bg-emerald-950 text-white border-emerald-850 shadow-xs'
           }`}
         >
-          {added ? 'যোগ করা হয়েছে!' : 'কার্টে যোগ করুন'}
+          {added ? 'যোগ করা হয়েছে!' : product.availableSoon ? 'অগ্রিম প্রি-অর্ডার' : 'কার্টে যোগ করুন'}
         </button>
       </div>
     </div>
@@ -1689,6 +1700,7 @@ export default function App() {
       { id: 'milk', label: 'দুধ ও ডেইরি 🥛', label_en: 'Milk & Dairy 🥛' },
       { id: 'honey', label: 'খাঁটি মধু 🍯', label_en: 'Pure Honey 🍯' },
       { id: 'spice', label: 'মসলাপাতি 🌶', label_en: 'Spices 🌶' },
+      { id: 'weekly-combo', label: 'সাপ্তাহিক অফার 🧺', label_en: 'Weekly Offer 🧺' },
       { id: 'other', label: 'কম্বো ও অন্যান্য 🧺', label_en: 'Combos & Other 🧺' }
     ];
   });
@@ -1805,6 +1817,7 @@ export default function App() {
   const [fNewProdCategory, setFNewProdCategory] = useState<Category>('vegetables');
   const [fNewProdImg, setFNewProdImg] = useState('');
   const [fNewProdDesc, setFNewProdDesc] = useState('');
+  const [fNewProdAvailableSoon, setFNewProdAvailableSoon] = useState(false);
   
   // Farmer profile correction states
   const [fEditName, setFEditName] = useState('');
@@ -1813,6 +1826,8 @@ export default function App() {
   const [fEditLocation, setFEditLocation] = useState('');
   const [fEditProducts, setFEditProducts] = useState('');
   const [fEditAvatar, setFEditAvatar] = useState('');
+  const [fEditFarmName, setFEditFarmName] = useState('');
+  const [fEditBio, setFEditBio] = useState('');
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState('');
@@ -1909,55 +1924,51 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'model'; content: string }>>([
     {
       role: 'model',
-      content: "আসসালামু আলাইকুম! আমি 'Riktaz AI' কৃষক বাজার এআই সহকারী। আমি যেকোনো পণ্যের দাম, বেস্ট সেলার, বা ৩ জনের ফ্যামিলির ১ সপ্তাহের বাজার সম্পর্কে সরাসরি সাহায্য করতে পারি। আপনি নিচের যেকোনো কুইক অপশন সিলেক্ট করতে পারেন!"
+      content: "আসসালামু আলাইকুম! কৃষক বাজারে আপনাকে স্বাগতম। আমি আপনার ডিজিটাল সহকারী। আমি আপনাকে টাটকা পণ্য খুঁজে পেতে এবং অর্ডার করতে সাহায্য করতে পারি। বলুন, আজকে আপনাকে কিভাবে সাহায্য করতে পারি?"
     }
   ]);
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
 
-  // Speech Recognition & Voice Input Support
+  // Audio / Speech recognition states
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
 
-  const startListening = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("দুঃখিত, আপনার ব্রাউজারে স্পিচ-টু-টেক্সট ভয়েস ইনপুট সমর্থিত নয়। দয়া করে গুগল ক্রোভ অথবা অন্য আধুনিক ব্রাউজার ব্যবহার করুন।");
-      return;
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const rec = new SpeechRecognition();
+        rec.continuous = false;
+        rec.interimResults = false;
+        rec.lang = 'bn-BD';
+
+        rec.onresult = (event: any) => {
+          const text = event.results[0][0].transcript;
+          setChatInput(text);
+          stopListening();
+        };
+
+        rec.onerror = (e: any) => {
+          console.error('Speech recognition error:', e);
+          stopListening();
+        };
+
+        rec.onend = () => {
+          setIsListening(false);
+        };
+
+        recognitionRef.current = rec;
+      }
     }
+  }, []);
 
-    try {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.lang = 'bn-BD';
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
-
-      recognition.onstart = () => {
-        setIsListening(true);
-      };
-
-      recognition.onerror = (event: any) => {
-        console.error("Speech recognition error", event);
-        setIsListening(false);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        if (transcript) {
-          setChatInput(prev => prev ? prev + ' ' + transcript : transcript);
-        }
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch (err) {
-      console.error("Speech recognition initialization failed", err);
-      setIsListening(false);
+  const startListening = () => {
+    if (recognitionRef.current) {
+      setIsListening(true);
+      recognitionRef.current.start();
+    } else {
+      alert('দুঃখিত, আপনার ব্রাউজার স্পিচ রিকগনিশন সমর্থন করে না।');
     }
   };
 
@@ -2100,37 +2111,49 @@ export default function App() {
     return unsub;
   }, []);
 
-  // Secure silent seeding check (Only attempted post-auth resolution when logged in as the Admin)
+  // Global silent seeding check (Ensures Firestore has standard stock if empty on app launch; restricted to admin client to prevent permission denied errors)
   useEffect(() => {
-    if (customerUser && customerUser.email === 'krishokbazar.com@gmail.com') {
-      const silentAutoSeed = async () => {
-        try {
-          const { getDocs, collection, writeBatch, doc } = await import('firebase/firestore');
-          const prodCol = await getDocs(collection(db, 'products'));
-          if (prodCol.empty) {
-            console.log("Firestore empty. Seeding INITIAL_PRODUCTS / FARMERS / VIDEOS / REVIEWS silently...");
+    if (!customerUser || customerUser.email !== 'krishokbazar.com@gmail.com') return;
+
+    const silentAutoSeed = async () => {
+      try {
+        const { getDocs, collection, writeBatch, doc } = await import('firebase/firestore');
+        const prodCol = await getDocs(collection(db, 'products'));
+        if (prodCol.empty) {
+          console.log("Firestore empty. Seeding INITIAL_PRODUCTS / FARMERS / VIDEOS / REVIEWS silently...");
+          const batch = writeBatch(db);
+          INITIAL_PRODUCTS.forEach(p => {
+            batch.set(doc(db, 'products', String(p.id)), p);
+          });
+          INITIAL_FARMERS.forEach(f => {
+            batch.set(doc(db, 'farmers', String(f.id)), f);
+          });
+          INITIAL_VIDEOS.forEach(v => {
+            batch.set(doc(db, 'videos', String(v.id)), v);
+          });
+          INITIAL_REVIEWS.forEach(r => {
+            batch.set(doc(db, 'reviews', String(r.id)), r);
+          });
+          await batch.commit();
+          console.log("Silent seeding successfully completed globally!");
+        } else {
+          const hasWeekly = prodCol.docs.some(d => d.data().slug === 'weekly-light-basket');
+          if (!hasWeekly) {
+            console.log("Database seeded but missing new weekly packs. Running incremental seeding...");
             const batch = writeBatch(db);
-            INITIAL_PRODUCTS.forEach(p => {
+            const weeklyCombos = INITIAL_PRODUCTS.filter(p => p.cat === 'weekly-combo');
+            weeklyCombos.forEach(p => {
               batch.set(doc(db, 'products', String(p.id)), p);
             });
-            INITIAL_FARMERS.forEach(f => {
-              batch.set(doc(db, 'farmers', String(f.id)), f);
-            });
-            INITIAL_VIDEOS.forEach(v => {
-              batch.set(doc(db, 'videos', String(v.id)), v);
-            });
-            INITIAL_REVIEWS.forEach(r => {
-              batch.set(doc(db, 'reviews', String(r.id)), r);
-            });
             await batch.commit();
-            console.log("Silent seeding successfully completed!");
+            console.log("Incremental seeding of weekly combos complete!");
           }
-        } catch (err) {
-          console.error("Silent seeding check failed:", err);
         }
-      };
-      silentAutoSeed();
-    }
+      } catch (err) {
+        console.warn("Silent seeding check (fails gracefully if not admin yet):", err);
+      }
+    };
+    silentAutoSeed();
   }, [customerUser]);
 
   // Simple local state to track if a new pending order came
@@ -2384,7 +2407,7 @@ export default function App() {
         snapshot.forEach(doc => {
           list.push(doc.data() as HeroBanner);
         });
-        setHeroBanners(list.sort((a, b) => Number(a.id) - Number(b.id)));
+        setHeroBanners(list);
       } else {
         setHeroBanners(INITIAL_BANNERS);
       }
@@ -2398,7 +2421,7 @@ export default function App() {
         snapshot.forEach(doc => {
           list.push(doc.data() as PromoOffer);
         });
-        setOffers(list.sort((a, b) => a.id.localeCompare(b.id)));
+        setOffers(list);
       } else {
         setOffers(INITIAL_OFFERS);
       }
@@ -2460,7 +2483,6 @@ export default function App() {
         comments: []
       }
     ];
-
     const unsubFarmerPosts = onSnapshot(collection(db, 'farmer_posts'), (snapshot) => {
       if (!snapshot.empty) {
         const list: any[] = [];
@@ -2501,54 +2523,7 @@ export default function App() {
     };
   }, []);
 
-  // Tracks user idle time (22 seconds) and displays a professional premium subscription pop-up modal
-  useIdleTimer(
-    22, // 22 seconds idle time (between 20-25 seconds range)
-    () => {
-      const isSubscribed = localStorage.getItem('is_premium_sub') === 'true';
-      const hasBeenShown = sessionStorage.getItem('promo_popup_shown') === 'true';
 
-      if (!isSubscribed && !hasBeenShown) {
-        setIsPremiumPlansOpen(true);
-        sessionStorage.setItem('promo_popup_shown', 'true');
-      }
-    },
-    !isPremiumSubscriber && !isPremiumPlansOpen
-  );
-
-  // Timed popups for subscription promotional advertisement offers
-  useEffect(() => {
-    // 20 Seconds: Ad 1
-    const timer1 = setTimeout(() => {
-      const sourceAds = isLoggedInFarmer ? FARMER_ADS : CUSTOMER_ADS;
-      setActiveAd(sourceAds[0]);
-    }, 20000);
-
-    // 25 Seconds: Ad 2
-    const timer2 = setTimeout(() => {
-      const sourceAds = isLoggedInFarmer ? FARMER_ADS : CUSTOMER_ADS;
-      setActiveAd(sourceAds[1]);
-    }, 25000);
-
-    // 1 Minute (60 seconds): Ad 3
-    const timer3 = setTimeout(() => {
-      const sourceAds = isLoggedInFarmer ? FARMER_ADS : CUSTOMER_ADS;
-      setActiveAd(sourceAds[2]);
-    }, 60000);
-
-    // 2 Minutes (120 seconds): Ad 4
-    const timer4 = setTimeout(() => {
-      const sourceAds = isLoggedInFarmer ? FARMER_ADS : CUSTOMER_ADS;
-      setActiveAd(sourceAds[3]);
-    }, 120000);
-
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
-      clearTimeout(timer4);
-    };
-  }, [isLoggedInFarmer]);
 
 
   useEffect(() => {
@@ -2931,21 +2906,6 @@ function cleanFirestoreData(data: any): any {
                 <MapPin size={10} className="text-red-500 fill-red-500" />
                 <span>ডেলিভারি: ঢাকা সিটি</span>
               </div>
-
-              {/* Top Search Mini Indicator Trigger */}
-              <button 
-                onClick={() => {
-                  setCurrentPage('home');
-                  setTimeout(() => {
-                    document.getElementById('search-box')?.focus();
-                    document.getElementById('search-box')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  }, 100);
-                }}
-                className="p-2 rounded-full hover:bg-stone-100 text-stone-500 transition-all border border-stone-100 shrink-0 cursor-pointer"
-                title="পণ্য খুঁজুন"
-              >
-                <Search size={13} />
-              </button>
             </div>
 
             {/* Account Dashboard & Cart triggers */}
@@ -2994,76 +2954,6 @@ function cleanFirestoreData(data: any): any {
               </button>
             </div>
           </div>
-
-          {/* Bottom Row: Desktop Horizontal Navigation List */}
-          <nav className="flex items-center gap-2 sm:gap-4 text-stone-605 text-[10.5px] font-bold font-sans overflow-x-auto pb-1 no-scrollbar pt-1.5 border-t border-stone-100 flex-nowrap shrink-0 whitespace-nowrap">
-            <button 
-              onClick={() => setIsNavMenuOpen(true)} 
-              className="transition-all cursor-pointer shrink-0 py-1 px-3 rounded-lg bg-emerald-900 text-white font-black hover:bg-emerald-950 flex items-center gap-1 shadow-xs hover:scale-102"
-              title="কৃষক বাজার প্রধান মেনু"
-            >
-              <span>☰</span>
-              <span>মেনু (Menu)</span>
-            </button>
-            <button 
-              onClick={() => { setCurrentPage('home'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} 
-              className={`transition-colors cursor-pointer shrink-0 py-1 px-2.5 rounded-lg ${currentPage === 'home' ? 'bg-emerald-800 text-white' : 'hover:text-emerald-800 bg-emerald-50 text-emerald-950'}`}
-            >
-              হোম (Home)
-            </button>
-            <button 
-              onClick={() => { setCurrentPage('home'); setTimeout(() => { document.getElementById('products-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100); }} 
-              className={`transition-colors cursor-pointer shrink-0 py-1 px-2.5 rounded-lg hover:bg-stone-100 ${currentPage === 'home' && activeCategory === 'all' ? 'text-emerald-800' : ''}`}
-            >
-              {t('শপ (Shop)', 'Shop')}
-            </button>
-            <button 
-              onClick={() => { setCurrentPage('blog'); }} 
-              className={`transition-colors cursor-pointer shrink-0 py-1 px-2.5 rounded-lg ${currentPage === 'blog' ? 'bg-emerald-800 text-white' : 'hover:text-emerald-850'}`}
-            >
-              📊 {t('ব্লগ ও ভিডিও ফিড (Blog)', 'Live Blog')}
-            </button>
-            <button 
-              onClick={() => { setCurrentPage('social'); }} 
-              className={`transition-colors cursor-pointer shrink-0 py-1 px-2.5 rounded-lg ${currentPage === 'social' ? 'bg-emerald-800 text-white' : 'hover:text-emerald-850'}`}
-            >
-              💬 {t('চাষী সামাজিক ফিড (Social Feed)', 'Farmer Social Feed')}
-            </button>
-            <button 
-              onClick={() => { setCurrentPage('verify'); }} 
-              className={`transition-colors cursor-pointer shrink-0 py-1 px-2.5 rounded-lg ${currentPage === 'verify' ? 'bg-emerald-800 text-white' : 'hover:text-emerald-850'}`}
-            >
-              🌾 {t('চাষী ভেরিফিকেশন (Verify)', 'Farmer Verification')}
-            </button>
-            <button 
-              onClick={() => { setCurrentPage('about'); }} 
-              className={`transition-colors cursor-pointer shrink-0 py-1 px-2.5 rounded-lg ${currentPage === 'about' ? 'bg-emerald-800 text-white' : 'hover:text-emerald-850'}`}
-            >
-              👩‍🌾 {t('আমাদের সম্পর্কে (About)', 'Our Story')}
-            </button>
-            <button 
-              onClick={() => { setCurrentPage('contact'); }} 
-              className={`transition-colors cursor-pointer shrink-0 py-1 px-2.5 rounded-lg ${currentPage === 'contact' ? 'bg-emerald-800 text-white' : 'hover:text-emerald-850'}`}
-            >
-              📞 {t('যোগাযোগ (Contact)', 'Contact')}
-            </button>
-            <button 
-              onClick={handleDirectDownload} 
-              className="text-amber-800 hover:text-amber-955 transition-all font-extrabold text-[10.5px] cursor-pointer shrink-0 py-1 px-2.5 bg-amber-50 border border-amber-200 text-amber-950 rounded-lg flex items-center gap-1 hover:scale-102 hover:shadow-xs active:scale-98"
-              title="মোবাইল বা কম্পিউটারে অ্যাপ ইনস্টল করুন"
-            >
-              <span>📱</span>
-              <span>{t('অ্যাপ ডাউনলোড (Download App)', 'Direct Download')}</span>
-            </button>
-            <button 
-              onClick={() => setIsShareOpen(true)} 
-              className="text-sky-800 hover:text-sky-950 transition-all font-extrabold text-[10.5px] cursor-pointer shrink-0 py-1 px-2.5 bg-sky-50 border border-sky-200 text-sky-955 rounded-lg flex items-center gap-1 hover:scale-102 hover:shadow-xs active:scale-98"
-              title="অন্যদের সাথে... শেয়ার করুন"
-            >
-              <span>🔗</span>
-              <span>{t('শেয়ার করুন (Share)', 'Share App')}</span>
-            </button>
-          </nav>
         </div>
       </header>
 
@@ -3113,67 +3003,7 @@ function cleanFirestoreData(data: any): any {
 
         {currentPage === 'home' && (
           <>
-            {/* Dynamic Search Box component */}
-            <section id="search-section" className="mb-6 max-w-xl mx-auto">
-          <div className="relative group shadow-sm rounded-2xl overflow-hidden">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 group-focus-within:text-emerald-800 transition-colors" size={17} />
-            <input 
-              id="search-box"
-              type="text" 
-              placeholder={t("আদা, রসুন, বেগুন, চাল বা পছন্দের ফ্রেশ সবজি খুঁজুন...", "Search for ginger, garlic, rice or fresh vegetables...")}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-11 pr-5 py-3.5 bg-white border border-stone-200/80 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-800/10 text-xs font-medium transition-all"
-            />
-            {searchQuery && (
-              <button 
-                onClick={() => setSearchQuery('')}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-1 text-stone-400 hover:text-stone-900"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
-        </section>
 
-        {/* Premium and Ready-to-cook Hero info bar banner */}
-        <div className="mb-10 bg-gradient-to-r from-emerald-50 via-amber-50/50 to-emerald-50/40 border border-emerald-800/15 p-5 rounded-3xl text-left flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm relative overflow-hidden">
-          <div className="absolute -right-3 -bottom-3 text-emerald-850/5 pointer-events-none w-24 h-24">
-            <Sparkles size={80} />
-          </div>
-          <div className="space-y-1 z-10 max-w-2xl font-sans">
-            <h4 className="text-sm sm:text-base font-serif font-black text-emerald-900 flex items-center gap-1.5 flex-wrap">
-              <span>👑 {t('কৃষক বাজার প্রিমিয়াম ক্লাব', 'Krishok Bazar Premium Club')}</span>
-              <span className="bg-amber-100 text-amber-800 font-black text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-300">
-                {t('রেডি-টু-কুক সুবিধা', 'Ready-to-Cook Processing')}
-              </span>
-            </h4>
-            <p className="text-xs text-stone-600 leading-relaxed font-semibold">
-              {t('মাত্র ৫০০ টাকা থেকে প্রতি মাসে সাবস্ক্রাইব করে একই মূল্যে ডেলিভারি পান একদম প্রক্রিয়াজাত এবং রেডি-টু-কুক তরতাজা সবজি, ম্যারিনেট করা মাংস এবং ঘরে ভাঙা মসলাসমূহ! কোনো বাড়তি কাটা ধোয়া ফিস বা ডেলিভারি ফিস নেই।', 'Subscribe from only 500 Taka monthly to receive pre-cut, washed vegetables, marinated raw meats, and home-milled spices delivered to your kitchen at original farmer price. Zero extra processing or cutting fees.')}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2 z-10 shrink-0">
-            <button
-               onClick={() => setIsPremiumPlansOpen(true)}
-              className="bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-black px-4 py-2.5 rounded-xl transition-all shadow-sm active:scale-98 cursor-pointer"
-            >
-              👑 {t('সাবস্ক্রিপশন প্ল্যানসমূহ', 'View Subscription Tiers')}
-            </button>
-            {isPremiumSubscriber ? (
-              <span className="bg-emerald-100 text-emerald-850 px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1 border border-emerald-300">
-                <CheckCircle size={13} />
-                <span>{t('আপনি প্রিমিয়াম মেম্বার', 'Active Premium Member')}</span>
-              </span>
-            ) : (
-              <button
-                onClick={() => setIsPremiumPlansOpen(true)}
-                className="bg-white hover:bg-stone-100 text-emerald-700 border border-emerald-200 text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-xs cursor-pointer"
-              >
-                🍳 {t('কি কি থাকছে?', 'What\'s Included')}
-              </button>
-            )}
-          </div>
-        </div>
 
         {/* Hero Slider / Carousel */}
         <section className="mb-8 rounded-[32px] overflow-hidden">
@@ -3316,8 +3146,18 @@ function cleanFirestoreData(data: any): any {
                           alt={product.title} 
                           className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-350"
                         />
-                        {product.isBestSeller && (
+                        {product.availableSoon && (
+                          <span className="absolute top-2 left-2 bg-indigo-600 text-white text-[8px] font-extrabold px-2 py-1 rounded-full shadow-sm z-10 flex items-center gap-0.5 border border-indigo-400">
+                            ⏳ আসছে শীঘ্রই
+                          </span>
+                        )}
+                        {product.isBestSeller && !product.availableSoon && (
                           <span className="absolute top-2 left-2 bg-amber-500 text-stone-900 text-[8px] font-bold px-2 py-0.5 rounded-full shadow-xs uppercase tracking-wider">
+                            সেরা বিক্রয়
+                          </span>
+                        )}
+                        {product.isBestSeller && product.availableSoon && (
+                          <span className="absolute top-8 left-2 bg-amber-500 text-stone-900 text-[8px] font-bold px-2 py-0.5 rounded-full shadow-xs uppercase tracking-wider z-10">
                             সেরা বিক্রয়
                           </span>
                         )}
@@ -3374,45 +3214,35 @@ function cleanFirestoreData(data: any): any {
                     </div>
 
                     {/* Button actions layout */}
-                    <div className="p-3.5 pt-0 bg-stone-50/50 border-t border-stone-100/60 space-y-2">
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {/* Add to Cart button */}
-                        <button 
-                          onClick={() => {
-                            addToCart(product, 1);
-                            alert(`${product.title} কার্টে যোগ হয়েছে!`);
-                          }}
-                          className="w-full bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold py-2 rounded-xl text-[9px] transition-all flex items-center justify-center gap-1 cursor-pointer"
-                        >
-                          <ShoppingCart size={11} className="text-stone-500" />
-                          <span>কার্টে দিন</span>
-                        </button>
-
-                        {/* Buy Now button */}
-                        <button 
-                          onClick={() => {
-                            addToCart(product, 1);
-                            setIsCartOpen(true);
-                          }}
-                          className="w-full bg-emerald-850 hover:bg-emerald-950 text-white font-bold py-2 rounded-xl text-[9px] transition-all flex items-center justify-center gap-1 cursor-pointer"
-                        >
-                          <ShoppingBag size={11} />
-                          <span>কিনুন</span>
-                        </button>
-                      </div>
-
-                      {/* WhatsApp Order Button */}
-                      <a 
-                        href={`https://wa.me/88${GLOBAL_SUPPORT_PHONE_NUMBER}?text=${encodeURIComponent(
-                          `সালাম, কৃষক বাজার বাংলাদেশ থেকে আমি "${product.title}" (${product.unit}) অর্ডার করতে চাই।\nমূল্য: ৳${product.price}\nউৎস কৃষক: ${product.farmer}`
-                        )}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="w-full bg-[#25D366] hover:bg-[#20ba5a] text-white font-extrabold py-2 rounded-xl text-[9.5px] transition-all flex items-center justify-center gap-1 shadow-xs"
-                      >
-                        <Phone size={11} />
-                        <span>WhatsApp অর্ডার</span>
-                      </a>
+                    <div className="p-3.5 pt-0 bg-stone-50/50 border-t border-stone-100/60 font-sans">
+                       <div className="grid grid-cols-2 gap-2">
+                         {/* Add to Cart button */}
+                         <button 
+                           onClick={() => {
+                             addToCart(product, 1);
+                             alert(`${product.title} ${product.availableSoon ? 'প্রি-অর্ডার' : ''} কার্টে যোগ হয়েছে!`);
+                           }}
+                           className="w-full bg-stone-100 hover:bg-stone-200 text-stone-850 font-black py-2.5 rounded-xl text-[10.5px] transition-all flex items-center justify-center gap-1 cursor-pointer border border-stone-200/50"
+                         >
+                           <ShoppingCart size={12} className="text-stone-500" />
+                           <span>{product.availableSoon ? 'প্রি-অর্ডার' : 'কার্টে দিন'}</span>
+                         </button>
+ 
+                         {/* Direct Order button */}
+                         <button 
+                           onClick={() => {
+                             const exists = cart.some(item => item.id === product.id);
+                             if (!exists) {
+                               addToCart(product, 1);
+                             }
+                             setIsOrderModalOpen(true);
+                           }}
+                           className="w-full py-2.5 rounded-xl text-[10.5px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer bg-emerald-800 hover:bg-emerald-900 text-white shadow-xs"
+                         >
+                           <CheckCheck size={12} />
+                           <span>{product.availableSoon ? 'প্রি-অর্ডার' : 'অর্ডার করুন'}</span>
+                         </button>
+                       </div>
                     </div>
                   </div>
                 );
@@ -3602,6 +3432,11 @@ function cleanFirestoreData(data: any): any {
                     <p className="text-[10px] font-bold text-amber-700 flex items-center gap-0.5">
                       📍 {farmer.location}
                     </p>
+                    {farmer.farmName && (
+                      <p className="text-[10px] font-bold text-emerald-800 flex items-center gap-0.5">
+                        🏡 {farmer.farmName}
+                      </p>
+                    )}
                     <p className="subtitle text-[10.5px] text-stone-500 font-medium">
                       প্রধান ফসল: <span className="text-stone-850 font-bold bg-stone-100 px-1.5 py-0.5 rounded-md">{farmer.mainCrop || 'সবজি ও মরিচ'}</span>
                     </p>
@@ -4335,7 +4170,14 @@ function cleanFirestoreData(data: any): any {
                     <div key={`${item.id}-${idx}`} className="flex gap-3 bg-stone-50 p-3 rounded-xl border border-stone-150 transition-all">
                       <img src={item.img} alt={item.title} className="w-16 h-16 rounded-lg object-cover bg-stone-100" />
                       <div className="flex-1 text-left">
-                        <h5 className="font-bold text-xs text-stone-900 line-clamp-1">{item.title}</h5>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h5 className="font-bold text-xs text-stone-900 line-clamp-1">{item.title}</h5>
+                          {item.availableSoon && (
+                            <span className="bg-indigo-50 text-indigo-705 text-[8px] font-extrabold px-1.5 py-0.5 rounded-md border border-indigo-150 inline-block">
+                              ⏳ প্রি-অর্ডার
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[10px] text-emerald-800 font-bold mt-0.5">চাষী: {item.farmer || 'কৃষক গ্রূপ'}</p>
                         
                         {/* Selected weight tier info */}
@@ -4586,6 +4428,11 @@ function cleanFirestoreData(data: any): any {
               alert(`${p.title} কার্টে যোগ করা হয়েছে!`);
               setSelectedProduct(null);
             }}
+            onOrderNow={(p, qty, w) => {
+              addToCart(p, qty, w);
+              setSelectedProduct(null);
+              setIsOrderModalOpen(true);
+            }}
             onSelectFarmer={(f) => {
               setSelectedFarmer(f);
               setSelectedProduct(null);
@@ -4594,15 +4441,39 @@ function cleanFirestoreData(data: any): any {
             isLoggedInFarmer={isLoggedInFarmer}
             loggedInFarmer={loggedInFarmer}
             onUpdateProduct={async (updated) => {
-              setDbProducts(prev => prev.map(p => p.id === updated.id ? updated : p));
+              await setDbProducts(prev => prev.map(p => p.id === updated.id ? updated : p));
               setSelectedProduct(null);
             }}
             onDeleteProduct={async (productId) => {
               if (confirm('আপনি কি সত্যিই এই পণ্যটি বাজার তালিকা থেকে মুছে ফেলতে চান?')) {
-                setDbProducts(prev => prev.filter(p => p.id !== productId));
+                await setDbProducts(prev => prev.filter(p => p.id !== productId));
                 setSelectedProduct(null);
               }
             }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Admin Panel Dashboard Overlay */}
+      <AnimatePresence>
+        {currentView === 'admin' && (
+          <AdminPanel
+            onClose={() => {
+              setCurrentView('home');
+              window.location.hash = '';
+            }}
+            orders={orderHistory}
+            onUpdateOrderStatus={updateOrderStatus}
+            products={products}
+            setProducts={setDbProducts as any}
+            farmers={farmers}
+            setFarmers={setDbFarmers as any}
+            videos={videos}
+            setVideos={setVideos as any}
+            broadcastMsg={broadcastMsg}
+            setBroadcastMsg={saveBroadcastMsg}
+            heroBanners={heroBanners}
+            setHeroBanners={setHeroBanners}
           />
         )}
       </AnimatePresence>
@@ -4887,25 +4758,23 @@ function cleanFirestoreData(data: any): any {
 
                 {/* Image Upload Zone */}
                 <div className="space-y-2">
-                  <ImageUploadZone 
-                    label="ফসল বা খাদ্যের মূল ছবি (Upload Product Photo)"
-                    initialImage={editingProduct.img}
-                    onImageUploaded={(base64) => {
-                      setEditingProduct({ ...editingProduct, img: base64 });
-                    }}
-                  />
-                  {editingProduct.img && !editingProduct.img.startsWith('data:') && (
+                    <ImageUploadZone 
+                      label="ফসল বা খাদ্যের মূল ছবি (Upload Product Photo)"
+                      initialImage={editingProduct.img}
+                      onImageUploaded={(base64) => {
+                        setEditingProduct({ ...editingProduct, img: base64 });
+                      }}
+                    />
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-stone-500 uppercase">অথবা ছবির সরাসরি লিঙ্ক (Optional URL)</label>
+                      <label className="text-[10px] font-bold text-stone-500 uppercase">অথবা ছবির সরাসরি লিঙ্ক (Optional URL / GD Drive Link)</label>
                       <input 
                         type="text"
-                        value={editingProduct.img}
-                        onChange={(e) => setEditingProduct({ ...editingProduct, img: e.target.value })}
+                        value={editingProduct.img || ''}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, img: convertGoogleDriveUrl(e.target.value) })}
                         className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl outline-none text-[11px] text-stone-700 font-sans"
                         placeholder="ছবির সরাসরি http:// বা https:// লিঙ্ক"
                       />
                     </div>
-                  )}
                 </div>
               </div>
 
@@ -5328,7 +5197,8 @@ function cleanFirestoreData(data: any): any {
                             approved: false, // MANDATORY Admin verification first!
                             rating: 4.8,
                             gallery: [fNewProdImg || 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&q=80&w=400'],
-                            weightOptions: ['৫০০ গ্রাম', '১ কেজি', '২ কেজি']
+                            weightOptions: ['৫০০ গ্রাম', '১ কেজি', '২ কেজি'],
+                            availableSoon: fNewProdAvailableSoon
                           };
 
                           await setDoc(doc(db, 'products', String(newId)), newFarmerProduct);
@@ -5339,6 +5209,7 @@ function cleanFirestoreData(data: any): any {
                           setFNewProdPrice('');
                           setFNewProdImg('');
                           setFNewProdDesc('');
+                          setFNewProdAvailableSoon(false);
                           
                           alert('ফসল আপলোড সফল! ফসলটি এডমিন প্যানেলের পেন্ডিং তালিকায় যুক্ত করা হয়েছে। এডমিন অনুমোদন দিলে ফ্রন্ট-এন্ড ক্যাটালগে লাইভ দেখা যাবে।');
                         } catch (err: any) {
@@ -5424,6 +5295,19 @@ function cleanFirestoreData(data: any): any {
                             onChange={e => setFNewProdDesc(e.target.value)}
                             className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl outline-none text-xs text-stone-700 focus:ring-1 focus:ring-emerald-700 h-16 resize-none font-sans"
                           />
+                        </div>
+
+                        <div className="flex items-center gap-2 bg-amber-50/50 p-3 rounded-xl border border-amber-100 select-none">
+                          <input 
+                            type="checkbox" 
+                            id="fNewProdAvailableSoon"
+                            className="w-4 h-4 text-emerald-800 border-stone-300 rounded focus:ring-emerald-500 accent-emerald-800 cursor-pointer"
+                            checked={fNewProdAvailableSoon}
+                            onChange={e => setFNewProdAvailableSoon(e.target.checked)}
+                          />
+                          <label htmlFor="fNewProdAvailableSoon" className="text-[11px] font-bold text-stone-700 cursor-pointer">
+                            ⏳ আসছে শীঘ্রই (Upcoming Harvest / Pre-orderable) - ফসলটি এখনো প্রস্তুত নয় কিন্তু গ্রাহক প্রি-অর্ডার করতে পারবে।
+                          </label>
                         </div>
 
                         <button 
@@ -5616,8 +5500,10 @@ function cleanFirestoreData(data: any): any {
                             password: fEditPass,
                             location: fEditLocation,
                             products: fEditProducts,
-                            avatar: fEditAvatar
-                          };
+                            avatar: fEditAvatar,
+                            farmName: fEditFarmName,
+                            bio: fEditBio
+                          } as any;
 
                           await setDoc(doc(db, 'farmers', String(loggedInFarmer.id)), updatedFarmerInfo);
                           setFarmers(prev => prev.map(f => f.id === loggedInFarmer.id ? updatedFarmerInfo : f));
@@ -5769,6 +5655,29 @@ function cleanFirestoreData(data: any): any {
                               value={fEditProducts}
                               onChange={e => setFEditProducts(e.target.value)}
                               className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl outline-none text-xs text-stone-705 focus:ring-1 focus:ring-emerald-700"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-stone-500 uppercase">খামারের নাম (Farm Name)</label>
+                            <input 
+                              type="text"
+                              value={fEditFarmName}
+                              onChange={e => setFEditFarmName(e.target.value)}
+                              className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl outline-none text-xs text-stone-705 focus:ring-1 focus:ring-emerald-700"
+                              placeholder="উদা: আমাদের সবুজ খামার"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-stone-500 uppercase">কৃষকের পরিচিতি / বায়ো (Bio)</label>
+                            <input 
+                              type="text"
+                              value={fEditBio}
+                              onChange={e => setFEditBio(e.target.value)}
+                              className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl outline-none text-xs text-stone-705 focus:ring-1 focus:ring-emerald-700"
+                              placeholder="উদা: ১০ বছরের অভিজ্ঞতাসম্পন্ন সফল চাষী"
                             />
                           </div>
                         </div>
@@ -5969,7 +5878,7 @@ function cleanFirestoreData(data: any): any {
                         const cleanedCell = cell.trim();
                         const cleanedPass = pass.trim() || '1234';
 
-                        const shamim = {
+                        const shamim: Farmer = {
                           id: 101,
                           name: 'শামীম আহমেদ',
                           phone: '01712-859423',
@@ -5981,7 +5890,9 @@ function cleanFirestoreData(data: any): any {
                           avatar: DEFAULT_FARMER_BOY,
                           gender: 'male' as const,
                           verified: true,
-                          approved: true
+                          approved: true,
+                          farmName: 'সবুজ বাংলা এগ্রো',
+                          bio: 'সুদীর্ঘ ১২ বছর ধরে অরগানিক সবজি উৎপাদন করে আসছি।'
                         };
 
                         if (cleanedCell === 'শামীম আহমেদ') {
@@ -5992,6 +5903,8 @@ function cleanFirestoreData(data: any): any {
                           setFEditLocation(shamim.location || '');
                           setFEditProducts(shamim.products || '');
                           setFEditAvatar(shamim.avatar || '');
+                          setFEditFarmName(shamim.farmName || '');
+                          setFEditBio(shamim.bio || '');
                           setIsLoggedInFarmer(true);
                           return;
                         }
@@ -6035,6 +5948,8 @@ function cleanFirestoreData(data: any): any {
                         setFEditLocation(authorizedFarmer.location || '');
                         setFEditProducts(authorizedFarmer.products || '');
                         setFEditAvatar(authorizedFarmer.avatar || '');
+                        setFEditFarmName(authorizedFarmer.farmName || '');
+                        setFEditBio(authorizedFarmer.bio || '');
                         setIsLoggedInFarmer(true);
                       }}
                       className="w-full bg-emerald-800 hover:bg-emerald-900 text-white py-3 rounded-xl font-bold text-xs transition-all cursor-pointer"
@@ -6645,103 +6560,7 @@ function cleanFirestoreData(data: any): any {
       )}
     </AnimatePresence>
 
-    {/* Dynamic Animated Subscription & Targeted Offers Ad Popup Dialog */}
-    <AnimatePresence>
-      {activeAd && (
-        <div className="fixed inset-0 z-[180] flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-md">
-          <motion.div 
-            initial={{ scale: 0.93, opacity: 0, y: 40 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.93, opacity: 0, y: 40 }}
-            className={`bg-gradient-to-br ${activeAd.accentColor} rounded-[32px] overflow-hidden max-w-md w-full shadow-2xl relative text-left border border-white/20`}
-          >
-            {/* Close button top right corner */}
-            <div className="absolute top-4 right-4 z-20">
-              <button 
-                onClick={() => setActiveAd(null)}
-                className="bg-black/35 hover:bg-black/65 text-white/80 hover:text-white rounded-full p-2 transition cursor-pointer"
-                title="বিজ্ঞাপনটি बंद করুন"
-              >
-                <X size={15} />
-              </button>
-            </div>
 
-            {/* Premium Header/Banner Image */}
-            <div className="relative h-44 bg-black/10 overflow-hidden flex items-center justify-center">
-              <img 
-                src={activeAd.image} 
-                alt={activeAd.title} 
-                referrerPolicy="no-referrer"
-                className="w-full h-full object-cover opacity-85 hover:scale-105 transition-transform duration-1000"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
-              <div className="absolute bottom-3 left-4 flex gap-1.5 items-center">
-                <span className="bg-amber-400 text-stone-900 text-[10px] font-extrabold uppercase px-3 py-1 rounded-full shadow-md tracking-wider animate-pulse">
-                  📢 বিশেষ অফার (Live Ad)
-                </span>
-              </div>
-            </div>
-
-            {/* Core Content Box with Gorgeous Layout */}
-            <div className="p-6 space-y-4">
-              <div className="space-y-1">
-                <p className="text-amber-300 text-[11px] font-black uppercase tracking-wider font-mono">
-                  {activeAd.subtitle}
-                </p>
-                <h3 className="text-xl font-serif font-black text-white leading-snug tracking-tight">
-                  {activeAd.title}
-                </h3>
-              </div>
-              
-              <p className="text-xs text-stone-100/90 leading-relaxed font-sans font-medium">
-                {activeAd.description}
-              </p>
-
-              {/* Culinary ready to cook extra tag directly matching user prompt */}
-              {activeAd.id.startsWith('cust_') && (
-                <div className="bg-white/10 rounded-xl p-2.5 border border-white/10 flex items-center gap-2">
-                  <span className="p-1.5 bg-amber-400 rounded-lg text-stone-950 flex items-center justify-center shrink-0">
-                    <Sparkles size={12} />
-                  </span>
-                  <p className="text-[10px] text-white font-bold font-sans">
-                    🍳 রান্নার জন্য প্রস্তুত, কিচেন রেডি! (Ready to cook, prepared for the kitchen)
-                  </p>
-                </div>
-              )}
-
-              {/* Action and Dismiss CTA Button Alignment */}
-              <div className="pt-2 flex gap-3">
-                <button 
-                  onClick={() => {
-                    const act = activeAd.ctaAction;
-                    setActiveAd(null);
-                    if (act === 'subscribe') {
-                      setIsPremiumPlansOpen(true);
-                    } else if (act === 'products') {
-                      document.getElementById('products-section')?.scrollIntoView({ behavior: 'smooth' });
-                      setCurrentPage('home');
-                    } else if (act === 'whatsapp') {
-                      window.open(`https://wa.me/88${GLOBAL_SUPPORT_PHONE_NUMBER}?text=` + encodeURIComponent('সালাম এডমিন, আমি কৃষক বাজার বিজ্ঞাপনের অফারটি সম্পর্কে চ্যাট করতে চাই।'), '_blank');
-                    } else if (act === 'verify') {
-                      setCurrentPage('verify');
-                    }
-                  }}
-                  className="flex-1 bg-white hover:bg-stone-50 text-emerald-950 font-black text-xs py-3 rounded-2xl transition shadow-lg hover:shadow-xl cursor-pointer text-center"
-                >
-                  {activeAd.ctaText}
-                </button>
-                <button 
-                  onClick={() => setActiveAd(null)}
-                  className="px-5 bg-black/15 hover:bg-black/25 text-white/90 hover:text-white font-extrabold text-xs py-3 rounded-2xl transition border border-white/10 cursor-pointer text-center"
-                >
-                  বন্ধ করুন
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
 
     {/* PREMIUM CUSTOMER CLUB SUBSCRIPTION & MONETIZATION MODAL */}
     <AnimatePresence>
@@ -7294,6 +7113,34 @@ function HeroSlider({ banners, isAdmin, onEditBanner, AdminEditButton }: HeroSli
   );
 }
 
+// Helper to convert standard Google Drive and Dropbox share links into direct embedded static images
+export function convertGoogleDriveUrl(url: string): string {
+  if (!url) return '';
+  let trimmed = url.trim();
+
+  // 1. Google Drive Links (supports optional multi-account /u/0/ and /u/1/ prefixes)
+  const dMatch = trimmed.match(/\/file\/(?:u\/\d+\/)?d\/([a-zA-Z0-9_-]+)/);
+  if (dMatch && dMatch[1]) {
+    return `https://lh3.googleusercontent.com/d/${dMatch[1]}`;
+  }
+  const idMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (idMatch && idMatch[1]) {
+    return `https://lh3.googleusercontent.com/d/${idMatch[1]}`;
+  }
+
+  // 2. Dropbox Links
+  if (trimmed.includes('dropbox.com')) {
+    let converted = trimmed.replace('www.dropbox.com', 'dl.dropboxusercontent.com');
+    converted = converted.replace('?dl=0', '?raw=1').replace('?dl=1', '?raw=1');
+    if (!converted.includes('?raw=1') && !converted.includes('&raw=1')) {
+      converted += (converted.includes('?') ? '&' : '?') + 'raw=1';
+    }
+    return converted;
+  }
+
+  return trimmed;
+}
+
  // Product Details Sheet Bottom modal component
 function ProductDetailsSheet({
   product,
@@ -7305,7 +7152,8 @@ function ProductDetailsSheet({
   isLoggedInFarmer = false,
   loggedInFarmer = null,
   onUpdateProduct,
-  onDeleteProduct
+  onDeleteProduct,
+  onOrderNow
 }: {
   product: Product,
   farmers: Farmer[],
@@ -7316,7 +7164,8 @@ function ProductDetailsSheet({
   isLoggedInFarmer?: boolean,
   loggedInFarmer?: Farmer | null,
   onUpdateProduct?: (updated: Product) => void,
-  onDeleteProduct?: (productId: number) => void
+  onDeleteProduct?: (productId: number) => void,
+  onOrderNow?: (p: Product, qty: number, weight?: string) => void
 }) {
   const [selectedImg, setSelectedImg] = useState(product.img);
   const [quantity, setQuantity] = useState(1);
@@ -7330,9 +7179,14 @@ function ProductDetailsSheet({
   const [editUnit, setEditUnit] = useState(product.unit);
   const [editCat, setEditCat] = useState(product.cat);
   const [editDesc, setEditDesc] = useState(product.description || '');
-  const [editImg, setEditImg] = useState(product.img);
-  const [editGallery, setEditGallery] = useState(product.gallery ? product.gallery.join(', ') : '');
+  const [editPhoto1, setEditPhoto1] = useState(product.img || '');
+  const [editPhoto2, setEditPhoto2] = useState(product.gallery?.[0] || '');
+  const [editPhoto3, setEditPhoto3] = useState(product.gallery?.[1] || '');
+  const [editPhoto4, setEditPhoto4] = useState(product.gallery?.[2] || '');
+  const [editPhoto5, setEditPhoto5] = useState(product.gallery?.[3] || '');
   const [editWeightOptions, setEditWeightOptions] = useState(product.weightOptions ? product.weightOptions.join(', ') : '');
+  const [editAvailableSoon, setEditAvailableSoon] = useState(!!product.availableSoon);
+  const [editSpecs, setEditSpecs] = useState(product.specs ? product.specs.join(', ') : '');
 
   // Keep state synced if active product item changes
   useEffect(() => {
@@ -7342,9 +7196,14 @@ function ProductDetailsSheet({
     setEditUnit(product.unit);
     setEditCat(product.cat);
     setEditDesc(product.description || '');
-    setEditImg(product.img);
-    setEditGallery(product.gallery ? product.gallery.join(', ') : '');
+    setEditPhoto1(product.img || '');
+    setEditPhoto2(product.gallery?.[0] || '');
+    setEditPhoto3(product.gallery?.[1] || '');
+    setEditPhoto4(product.gallery?.[2] || '');
+    setEditPhoto5(product.gallery?.[3] || '');
     setEditWeightOptions(product.weightOptions ? product.weightOptions.join(', ') : '');
+    setEditAvailableSoon(!!product.availableSoon);
+    setEditSpecs(product.specs ? product.specs.join(', ') : '');
   }, [product]);
 
   // Generate 4 dynamic gallery options if gallery string array is null
@@ -7450,25 +7309,165 @@ function ProductDetailsSheet({
                 </select>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-stone-500 uppercase">প্রোডাক্ট ছবির লিঙ্ক (Image URL)</label>
-                <input 
-                  type="text"
-                  value={editImg}
-                  onChange={e => setEditImg(e.target.value)}
-                  className="w-full px-3 py-2 bg-stone-50 border rounded-xl outline-none text-xs text-stone-800 font-mono"
-                />
-              </div>
+              <div className="bg-stone-50 p-4 border border-stone-200 rounded-2xl space-y-4">
+                <h4 className="text-xs font-serif font-black text-emerald-950 flex items-center gap-1">
+                  <span>📸 পণ্যের প্রধান ও অতিরিক্ত ছবিসমূহ (৪ টি ছবি ও লিঙ্ক অপশন)</span>
+                </h4>
+                
+                {/* Photo 1 */}
+                <div className="bg-white p-3 border border-stone-150 rounded-xl space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-extrabold text-emerald-850 uppercase">১ম ছবি (প্রধান ছবি) - Photo 1 *</span>
+                    {editPhoto1 && (
+                      <button 
+                        type="button" 
+                        onClick={() => setEditPhoto1('')} 
+                        className="text-[9px] font-bold text-red-500 hover:text-red-700"
+                      >
+                        ছবি সরান
+                      </button>
+                    )}
+                  </div>
+                  <ImageUploadZone
+                    label=""
+                    initialImage={editPhoto1}
+                    onImageUploaded={(b64) => setEditPhoto1(b64)}
+                  />
+                  <div className="pt-1 select-none">
+                    <label className="text-[9px] font-bold text-stone-400 block mb-0.5">অথবা ১ম ছবির লিংক / Google Drive লিংক পেস্ট করুন:</label>
+                    <input 
+                      type="text"
+                      value={editPhoto1}
+                      onChange={e => setEditPhoto1(convertGoogleDriveUrl(e.target.value))}
+                      placeholder="পদ্ধতি: https://drive.google.com/..."
+                      className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg outline-none text-[11px] text-stone-700 font-mono focus:ring-1 focus:ring-emerald-700"
+                    />
+                  </div>
+                </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-stone-500 uppercase">প্রোডাক্ট গ্যালারি ইমেজ লিঙ্ক সমূহ (কমা দিয়ে একাধিক URL দিন)</label>
-                <input 
-                  type="text"
-                  value={editGallery}
-                  onChange={e => setEditGallery(e.target.value)}
-                  className="w-full px-3 py-2 bg-stone-50 border rounded-xl outline-none text-xs text-stone-800 font-mono"
-                  placeholder="উদা: URL1, URL2, URL3"
-                />
+                {/* Photo 2 */}
+                <div className="bg-white p-3 border border-stone-150 rounded-xl space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-extrabold text-stone-500 uppercase">২য় ছবি - Photo 2 (Gallery)</span>
+                    {editPhoto2 && (
+                      <button 
+                        type="button" 
+                        onClick={() => setEditPhoto2('')} 
+                        className="text-[9px] font-bold text-red-500 hover:text-red-700"
+                      >
+                        ছবি সরান
+                      </button>
+                    )}
+                  </div>
+                  <ImageUploadZone
+                    label=""
+                    initialImage={editPhoto2}
+                    onImageUploaded={(b64) => setEditPhoto2(b64)}
+                  />
+                  <div className="pt-1 select-none">
+                    <label className="text-[9px] font-bold text-stone-400 block mb-0.5">অথবা ২য় ছবির লিংক / Google Drive লিংক পেস্ট করুন:</label>
+                    <input 
+                      type="text"
+                      value={editPhoto2}
+                      onChange={e => setEditPhoto2(convertGoogleDriveUrl(e.target.value))}
+                      placeholder="পদ্ধতি: https://drive.google.com/..."
+                      className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg outline-none text-[11px] text-stone-700 font-mono focus:ring-1 focus:ring-emerald-700"
+                    />
+                  </div>
+                </div>
+
+                {/* Photo 3 */}
+                <div className="bg-white p-3 border border-stone-150 rounded-xl space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-extrabold text-stone-500 uppercase">৩য় ছবি - Photo 3 (Gallery)</span>
+                    {editPhoto3 && (
+                      <button 
+                        type="button" 
+                        onClick={() => setEditPhoto3('')} 
+                        className="text-[9px] font-bold text-red-500 hover:text-red-700"
+                      >
+                        ছবি সরান
+                      </button>
+                    )}
+                  </div>
+                  <ImageUploadZone
+                    label=""
+                    initialImage={editPhoto3}
+                    onImageUploaded={(b64) => setEditPhoto3(b64)}
+                  />
+                  <div className="pt-1 select-none">
+                    <label className="text-[9px] font-bold text-stone-400 block mb-0.5">অথবা ৩য় ছবির লিংক / Google Drive লিংক পেস্ট করুন:</label>
+                    <input 
+                      type="text"
+                      value={editPhoto3}
+                      onChange={e => setEditPhoto3(convertGoogleDriveUrl(e.target.value))}
+                      placeholder="পদ্ধতি: https://drive.google.com/..."
+                      className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg outline-none text-[11px] text-stone-700 font-mono focus:ring-1 focus:ring-emerald-700"
+                    />
+                  </div>
+                </div>
+
+                {/* Photo 4 */}
+                <div className="bg-white p-3 border border-stone-150 rounded-xl space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-extrabold text-stone-500 uppercase">৪র্থ ছবি - Photo 4 (Gallery)</span>
+                    {editPhoto4 && (
+                      <button 
+                        type="button" 
+                        onClick={() => setEditPhoto4('')} 
+                        className="text-[9px] font-bold text-red-500 hover:text-red-700"
+                      >
+                        ছবি সরান
+                      </button>
+                    )}
+                  </div>
+                  <ImageUploadZone
+                    label=""
+                    initialImage={editPhoto4}
+                    onImageUploaded={(b64) => setEditPhoto4(b64)}
+                  />
+                  <div className="pt-1 select-none">
+                    <label className="text-[9px] font-bold text-stone-400 block mb-0.5">অথবা ৪র্থ ছবির লিংক / Google Drive লিংক পেস্ট করুন:</label>
+                    <input 
+                      type="text"
+                      value={editPhoto4}
+                      onChange={e => setEditPhoto4(convertGoogleDriveUrl(e.target.value))}
+                      placeholder="পদ্ধতি: https://drive.google.com/..."
+                      className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg outline-none text-[11px] text-stone-700 font-mono focus:ring-1 focus:ring-emerald-700"
+                    />
+                  </div>
+                </div>
+
+                {/* Photo 5 */}
+                <div className="bg-white p-3 border border-stone-150 rounded-xl space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-extrabold text-stone-500 uppercase">৫ম ছবি - Photo 5 (Gallery)</span>
+                    {editPhoto5 && (
+                      <button 
+                        type="button" 
+                        onClick={() => setEditPhoto5('')} 
+                        className="text-[9px] font-bold text-red-500 hover:text-red-700"
+                      >
+                        ছবি সরান
+                      </button>
+                    )}
+                  </div>
+                  <ImageUploadZone
+                    label=""
+                    initialImage={editPhoto5}
+                    onImageUploaded={(b64) => setEditPhoto5(b64)}
+                  />
+                  <div className="pt-1 select-none">
+                    <label className="text-[9px] font-bold text-stone-400 block mb-0.5">অথবা ৫ম ছবির লিংক / Google Drive লিংক পেস্ট করুন:</label>
+                    <input 
+                      type="text"
+                      value={editPhoto5}
+                      onChange={e => setEditPhoto5(convertGoogleDriveUrl(e.target.value))}
+                      placeholder="পদ্ধতি: https://drive.google.com/..."
+                      className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg outline-none text-[11px] text-stone-700 font-mono focus:ring-1 focus:ring-emerald-700"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -7489,6 +7488,29 @@ function ProductDetailsSheet({
                   onChange={e => setEditDesc(e.target.value)}
                   className="w-full px-3 py-2 bg-stone-50 border rounded-xl outline-none text-xs text-stone-700 h-24 resize-none font-sans"
                 />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-stone-500 uppercase">📋 বিশদ বিবরণী / কম্বো আইটেম স্পেসিফিকেশন (কমা দিয়ে বিভক্ত)</label>
+                <textarea 
+                  value={editSpecs}
+                  onChange={e => setEditSpecs(e.target.value)}
+                  className="w-full px-3 py-2 bg-stone-50 border rounded-xl outline-none text-xs text-stone-700 h-20 resize-none font-sans-bold"
+                  placeholder="উদা: আলু (৫ কেজি), দেশি পেঁয়াজ (২ কেজি), রসুন (৫০০ গ্রাম)"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 bg-amber-50/50 p-3 rounded-xl border border-amber-100 select-none">
+                <input 
+                  type="checkbox" 
+                  id="editAvailableSoon"
+                  className="w-4 h-4 text-emerald-800 border-stone-300 rounded focus:ring-emerald-500 accent-emerald-800 cursor-pointer"
+                  checked={editAvailableSoon}
+                  onChange={e => setEditAvailableSoon(e.target.checked)}
+                />
+                <label htmlFor="editAvailableSoon" className="text-[11px] font-bold text-stone-700 cursor-pointer">
+                  ⏳ এই ফসলটি আসছে শীঘ্রই (Available Soon & Pre-orderable) - ফসল তোলা শেষ বা প্রস্তুতিহীন হলেও এটিকে প্রি-অর্ডার করানোর সুযোগ দিন।
+                </label>
               </div>
 
               <div className="pt-4 flex gap-3">
@@ -7515,13 +7537,22 @@ function ProductDetailsSheet({
                       return;
                     }
                     if (onUpdateProduct) {
-                      // Parse gallery
-                      const galleryArr = editGallery
-                        ? editGallery.split(',').map(s => s.trim()).filter(Boolean)
-                        : [];
+                      // Collect defined photo strings
+                      const fullGallery = [editPhoto1, editPhoto2, editPhoto3, editPhoto4, editPhoto5]
+                        .map(s => s.trim())
+                        .filter(Boolean);
+
+                      // Primary image is photo1, or fallback to the first active photo
+                      const primaryImg = editPhoto1.trim() || fullGallery[0] || 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&q=80&w=400';
+
                       // Parse weightOptions
                       const wOptArr = editWeightOptions
                         ? editWeightOptions.split(',').map(s => s.trim()).filter(Boolean)
+                        : [];
+
+                      // Parse specs (specifications)
+                      const specsArr = editSpecs
+                        ? editSpecs.split(',').map(s => s.trim()).filter(Boolean)
                         : [];
 
                       await onUpdateProduct({
@@ -7531,9 +7562,11 @@ function ProductDetailsSheet({
                         unit: editUnit,
                         cat: editCat,
                         description: editDesc,
-                        img: editImg,
-                        gallery: galleryArr.length > 0 ? galleryArr : undefined,
-                        weightOptions: wOptArr.length > 0 ? wOptArr : undefined
+                        img: primaryImg,
+                        gallery: fullGallery.length > 0 ? fullGallery : [primaryImg],
+                        weightOptions: wOptArr.length > 0 ? wOptArr : undefined,
+                        availableSoon: editAvailableSoon,
+                        specs: specsArr.length > 0 ? specsArr : undefined
                       });
                       alert('পণ্যটি সফলভাবে পরিবর্তন করা হয়েছে!');
                     }
@@ -7558,7 +7591,7 @@ function ProductDetailsSheet({
                     </span>
                   </div>
                   
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="grid grid-cols-5 gap-2">
                     {gallery.map((gImg, idx) => (
                       <button 
                         key={idx}
@@ -7653,14 +7686,45 @@ function ProductDetailsSheet({
                     </div>
                   </div>
 
+                  {product.availableSoon && (
+                    <div className="bg-indigo-50 border border-indigo-200/60 p-3 rounded-xl flex items-start gap-2 text-left select-none">
+                      <span className="text-sm">⏳</span>
+                      <div className="space-y-0.5">
+                        <h5 className="text-[11px] font-black text-indigo-900">আসছে শীঘ্রই (Pre-order Available)</h5>
+                        <p className="text-[9.5px] text-indigo-700 leading-snug">
+                          এই ফসলটি এখনো ক্ষেত থেকে তোলার জন্য সম্পূর্ণ প্রস্তুত নয় বা সতেজ উৎপাদিত হওয়ার অপেক্ষায় রয়েছে। অগ্রিম বুকিং নিশ্চিত করতে এখনই প্রি-অর্ডার করে রাখুন!
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Core CTA */}
-                  <button 
-                    onClick={() => onAdd(product, quantity, selectedWeight)}
-                    className="w-full bg-emerald-800 hover:bg-emerald-950 text-white py-3 rounded-xl font-bold text-xs shadow-md transition-all active:scale-97 cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <ShoppingCart size={14} />
-                    <span>বাজার কার্টে যোগ করুন (৳{(product.price * quantity).toLocaleString('bn-BD')})</span>
-                  </button>
+                  <div className="grid grid-cols-2 gap-2.5 w-full font-sans">
+                    <button 
+                      onClick={() => {
+                        onAdd(product, quantity, selectedWeight);
+                        alert(`"${product.title}" ${product.availableSoon ? 'প্রি-অর্ডার' : ''} কার্টে যোগ হয়েছে!`);
+                      }}
+                      className="w-full bg-stone-100 hover:bg-stone-200 text-stone-800 py-3.5 rounded-xl font-bold text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 border border-stone-200/50"
+                    >
+                      <ShoppingCart size={13} className="text-stone-500" />
+                      <span>{product.availableSoon ? 'প্রি-অর্ডার রাখুন' : 'কার্টে দিন'}</span>
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        if (onOrderNow) {
+                          onOrderNow(product, quantity, selectedWeight);
+                        } else {
+                          onAdd(product, quantity, selectedWeight);
+                        }
+                      }}
+                      className="w-full bg-emerald-850 hover:bg-emerald-900 text-white py-3.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+                    >
+                      <CheckCheck size={13} />
+                      <span>{product.availableSoon ? 'প্রি-অর্ডার' : 'অর্ডার করুন'}</span>
+                    </button>
+                  </div>
 
                 </div>
 
@@ -7673,6 +7737,21 @@ function ProductDetailsSheet({
                   {product.description || 'মহাস্থান গড় পুণ্ড্রবর্ধনের উর্বর পলিমাটির বগুড়া থেকে সংগৃহীত। রাসায়নিক সার মুক্ত এবং শতভাগ অরগানিক সার প্রয়োগে উৎপাদিত ফসল। সরাসরি মাঠ থেকে তোলার পর ক্ষতিকর কোন ফিজিক্যাল ওয়াশ বা কেমিক্যাল দেয়া হয়নি। গ্রাহকের রান্নাঘরে সতেজতার ডাবল নিশ্চয়তা প্রদান করতে আমরা বিশেষ কুলিং পার্সেল লজিস্টিক ব্যবহার করি।'}
                 </p>
               </div>
+
+              {/* Specs Section stacked */}
+              {product.specs && product.specs.length > 0 && (
+                <div className="space-y-2 border-t pt-4">
+                  <h4 className="text-xs font-bold text-emerald-950 uppercase tracking-widest font-serif">📋 প্যাকেজ স্পেসিফিকেশন ও আইটেম সমূহ</h4>
+                  <div className="grid grid-cols-2 gap-2 bg-emerald-50/50 p-4 rounded-2xl border border-stone-200">
+                    {product.specs.map((item, idx) => (
+                      <div key={idx} className="flex gap-1.5 items-start text-[11px] text-stone-800 font-sans font-medium">
+                        <span className="text-emerald-700">✓</span>
+                        <span>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Core Reviews and ratings section */}
               <div className="space-y-3.5 border-t pt-4">
@@ -8119,12 +8198,15 @@ function FarmerProfilePageSheet({
                 </span>
               </div>
 
-              <p className="text-xs text-stone-500 font-bold flex items-center justify-center sm:justify-start gap-0.5">
-                <MapPin size={12} className="text-red-500" /> এলাকা: {farmer.location}, বাংলাদেশ।
+              <p className="text-xs text-stone-500 font-bold flex flex-wrap items-center justify-center sm:justify-start gap-1.5">
+                <span className="flex items-center gap-0.5"><MapPin size={12} className="text-red-500" /> এলাকা: {farmer.location}, বাংলাদেশ।</span>
+                {farmer.farmName && (
+                  <span className="bg-emerald-50 text-emerald-800 border border-emerald-800/10 text-[10px] px-2 py-0.5 rounded-md font-bold">🏡 খামার: {farmer.farmName}</span>
+                )}
               </p>
 
               <p className="text-[11px] leading-relaxed text-stone-405 font-medium max-w-md">
-                আমরা বহু বছর ধরে মহাস্থান গড় পুণ্ড্রবর্ধন ও কেশবপুরের পলি উর্বর জমিতে কোনো প্রকার কীটনাশক প্রলেপ ছাড়া প্রাকৃতিক শস্য ফসল ফলাই। কৃষক বাজারের ডাইরেক্ট ফেয়ার ট্রেড আমাদের সঠিক অধিকার ফিরিয়ে দিয়েছে।
+                {farmer.bio || "আমরা বহু বছর ধরে মহাস্থান গড় পুণ্ড্রবর্ধন ও কেশবপুরের পলি উর্বর জমিতে কোনো প্রকার কীটনাশক প্রলেপ ছাড়া প্রাকৃতিক শস্য ফসল ফলাই। কৃষক বাজারের ডাইরেক্ট ফেয়ার ট্রেড আমাদের সঠিক অধিকার ফিরিয়ে দিয়েছে।"}
               </p>
 
               {isPremiumCustomer ? (
@@ -8238,13 +8320,25 @@ function FarmerProfilePageSheet({
                       >
                         {p.title}
                       </h5>
-                      <span className="text-[10px] font-black text-emerald-800">৳{p.price}</span>
-                      <button 
-                        onClick={() => onAddProduct(p)}
-                        className="text-[8px] bg-emerald-800 text-white px-2 py-0.5 rounded ml-2 font-bold"
-                      >
-                        + কার্ট
-                      </button>
+                      <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                        <span className="text-[10px] font-black text-emerald-800">৳{p.price}</span>
+                        {p.availableSoon && (
+                          <span className="bg-indigo-55 text-indigo-700 text-[6.5px] font-extrabold px-1 py-0.5 rounded border border-indigo-200 inline-block font-sans">
+                            ⏳ আসছে শীঘ্রই
+                          </span>
+                        )}
+                        <button 
+                          onClick={() => {
+                            onAddProduct(p);
+                            if (p.availableSoon) {
+                              alert(`"${p.title}" প্রিমিয়াম প্রি-অর্ডার কার্টে যোগ হয়েছে!`);
+                            }
+                          }}
+                          className={`text-[8px] ${p.availableSoon ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-emerald-800 hover:bg-emerald-900'} text-white px-2 py-0.5 rounded ml-1 font-bold cursor-pointer`}
+                        >
+                          {p.availableSoon ? '+ প্রি-অর্ডার' : '+ কার্ট'}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
