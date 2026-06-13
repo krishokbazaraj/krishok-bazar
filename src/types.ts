@@ -20,6 +20,9 @@ export interface Product {
   housewife?: string;
   availableSoon?: boolean;
   specs?: string[];
+  stock?: number;
+  harvestDate?: string;
+  deliveryDate?: string;
 }
 
 export interface Farmer {

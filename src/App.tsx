@@ -35,6 +35,7 @@ import {
   CheckCheck,
   Send,
   User,
+  Bell,
   Upload,
   Camera,
   Image,
@@ -1564,7 +1565,7 @@ export default function App() {
   };
 
   // Dynamic States reflecting data model changes in Admin panel
-   const [products, setProducts] = useState<Product[]>([]);
+   const [products, setProducts] = useState<Product[]>([...INITIAL_PRODUCTS].sort((a, b) => b.id - a.id));
   const [farmers, setFarmers] = useState<Farmer[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -1688,7 +1689,13 @@ export default function App() {
   const [categoriesList, setCategoriesList] = useState<any[]>(() => {
     const saved = localStorage.getItem('custom_categories');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try { 
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && !parsed.some((c: any) => c.id === 'ready-to-cook')) {
+          parsed.splice(parsed.length - 1, 0, { id: 'ready-to-cook', label: 'রেডি টু কুক 🍳', label_en: 'Ready To Cook 🍳' });
+        }
+        return parsed; 
+      } catch (e) {}
     }
     return [
       { id: 'all', label: 'সব পণ্য 📦', label_en: 'All Products 📦' },
@@ -1700,6 +1707,7 @@ export default function App() {
       { id: 'milk', label: 'দুধ ও ডেইরি 🥛', label_en: 'Milk & Dairy 🥛' },
       { id: 'honey', label: 'খাঁটি মধু 🍯', label_en: 'Pure Honey 🍯' },
       { id: 'spice', label: 'মসলাপাতি 🌶', label_en: 'Spices 🌶' },
+      { id: 'ready-to-cook', label: 'রেডি টু কুক 🍳', label_en: 'Ready To Cook 🍳' },
       { id: 'weekly-combo', label: 'সাপ্তাহিক অফার 🧺', label_en: 'Weekly Offer 🧺' },
       { id: 'other', label: 'কম্বো ও অন্যান্য 🧺', label_en: 'Combos & Other 🧺' }
     ];
@@ -1907,6 +1915,11 @@ export default function App() {
 
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [orderHistory, setOrderHistory] = useState<Order[]>([]);
+
+  // Live local order notification tracking states
+  const [newOrderAlert, setNewOrderAlert] = useState<Order | null>(null);
+  const [newOrdersBadgeCount, setNewOrdersBadgeCount] = useState<number>(0);
+  const isInitialLoadRef = useRef<boolean>(true);
 
   // Customer Profile, Auth, and Delivery states
   const [isCustomerDashboardOpen, setIsCustomerDashboardOpen] = useState(false);
@@ -2336,15 +2349,11 @@ export default function App() {
 
     // Real-time Firestore Subscriptions
     const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
-      if (!snapshot.empty) {
-        const list: Product[] = [];
-        snapshot.forEach(doc => {
-          list.push(doc.data() as Product);
-        });
-        setProducts(list.sort((a, b) => a.id - b.id));
-      } else {
-        setProducts(INITIAL_PRODUCTS);
-      }
+      const list: Product[] = [];
+      snapshot.forEach(doc => {
+        list.push(doc.data() as Product);
+      });
+      setProducts(mergeDbAndInitialProducts(list));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'products');
     });
@@ -2382,7 +2391,40 @@ export default function App() {
       snapshot.forEach(doc => {
         list.push(doc.data() as Order);
       });
-      setOrderHistory(list.sort((a, b) => b.id.localeCompare(a.id)));
+      const sorted = list.sort((a, b) => b.id.localeCompare(a.id));
+
+      if (!isInitialLoadRef.current && list.length > 0) {
+        setOrderHistory(prev => {
+          const freshOrders = sorted.filter(fresh => !prev.some(oldOrd => oldOrd.id === fresh.id));
+          if (freshOrders.length > 0) {
+            const newest = freshOrders[0];
+            setNewOrderAlert(newest);
+            setNewOrdersBadgeCount(c => c + 1);
+
+            try {
+              const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+              if (AudioCtx) {
+                const audioCtx = new AudioCtx();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.3);
+              }
+            } catch (e) {
+              console.log("Audio chime blocked", e);
+            }
+          }
+          return sorted;
+        });
+      } else {
+        setOrderHistory(sorted);
+        isInitialLoadRef.current = false;
+      }
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'orders');
     });
@@ -2448,8 +2490,12 @@ export default function App() {
           }
         } else if (id === 'custom_categories') {
           if (Array.isArray(data.list)) {
-            setCategoriesList(data.list);
-            localStorage.setItem('custom_categories', JSON.stringify(data.list));
+            const list = [...data.list];
+            if (!list.some(c => c.id === 'ready-to-cook')) {
+              list.splice(list.length - 1, 0, { id: 'ready-to-cook', label: 'রেডি টু কুক 🍳', label_en: 'Ready To Cook 🍳' });
+            }
+            setCategoriesList(list);
+            localStorage.setItem('custom_categories', JSON.stringify(list));
           }
         }
       });
@@ -2666,6 +2712,15 @@ export default function App() {
   const readyToCookItems = useMemo(() => {
     const dataSource = products.length > 0 ? products : INITIAL_PRODUCTS;
     return dataSource.filter(p => p.cat === 'ready-to-cook' || p.isReadyToCook);
+  }, [products]);
+
+  const bestSellingProducts = useMemo(() => {
+    const dataSource = products.length > 0 ? products : INITIAL_PRODUCTS;
+    return dataSource.filter(p => {
+      if (p.approved === false) return false;
+      if (p.disabled === true) return false;
+      return (p.isBestSeller === true || (p.rating && p.rating >= 4.8));
+    });
   }, [products]);
 
   const addToCart = (product: Product, quantity: number = 1, selectedWeight?: string) => {
@@ -2900,7 +2955,7 @@ function cleanFirestoreData(data: any): any {
             </div>
 
             {/* Quick Location Badge & Active Search Indicator */}
-            <div className="flex items-center gap-2 flex-grow sm:flex-grow-0 max-w-sm sm:max-w-none">
+            <div className="hidden md:flex items-center gap-2 flex-grow sm:flex-grow-0 max-w-sm sm:max-w-none">
               {/* Location Selector */}
               <div className="flex items-center gap-1 bg-amber-50 border border-amber-200/60 px-2.5 py-1.5 rounded-full text-[10px] font-bold text-amber-800 shadow-xs shrink-0 select-none">
                 <MapPin size={10} className="text-red-500 fill-red-500" />
@@ -2908,8 +2963,8 @@ function cleanFirestoreData(data: any): any {
               </div>
             </div>
 
-            {/* Account Dashboard & Cart triggers */}
-            <div className="flex items-center gap-2 shrink-0">
+            {/* Desktop Action Handles */}
+            <div className="hidden md:flex items-center gap-2 shrink-0">
               {/* Login Button (আমার অ্যাকাউন্ট / লগইন) */}
               <button 
                 onClick={() => { setCurrentPage('customer-dashboard'); }}
@@ -2937,10 +2992,26 @@ function cleanFirestoreData(data: any): any {
               {/* Farmer Login doors */}
               <button 
                 onClick={() => setIsFarmerLoginOpen(true)}
-                className="hidden md:flex items-center gap-1 border border-emerald-800/20 text-emerald-800 bg-emerald-50/40 px-2.5 py-2 rounded-full font-bold text-[10px] hover:bg-emerald-800 hover:text-white transition-all cursor-pointer"
+                className="items-center gap-1 border border-emerald-800/20 text-emerald-800 bg-emerald-50/40 px-2.5 py-2 rounded-full font-bold text-[10px] hover:bg-emerald-800 hover:text-white transition-all cursor-pointer"
               >
                 <Tractor size={11} />
                 <span>চাষী পোর্টাল</span>
+              </button>
+            </div>
+
+            {/* Combined Mobile & Desktop Controls (Notification Icon & Hamburger) */}
+            <div className="flex items-center gap-2 shrink-0">
+              {/* 🔔 Live Notification Bell Icon - Visible on all but crucial for mobile */}
+              <button
+                onClick={() => {
+                  alert('কৃষক বাজার লাইভ অ্যালার্ট: আপনার সব নোটিফিকেশন আপডেট এখানে দেখা যাবে। নতুন অর্ডারের সাথে সাথেই ইনস্ট্যান্ট নোটিফিকেশন চলে আসে!');
+                }}
+                className="flex items-center justify-center w-8.5 h-8.5 bg-stone-100 hover:bg-stone-200 rounded-full text-stone-600 transition-all relative cursor-pointer animate-none"
+                title="বিজ্ঞপ্তি সমূহ"
+              >
+                <Bell size={14} />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white animate-ping"></span>
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
               </button>
 
               {/* ☰ Main Fixed Navigation Menu Button */}
@@ -3058,11 +3129,148 @@ function cleanFirestoreData(data: any): any {
           <div className="bg-white border border-stone-200/60 p-3 md:p-6 rounded-2xl text-center shadow-sm flex flex-col justify-center items-center">
             <span className="text-xl md:text-3xl mb-1.5">🤝</span>
             <div className="text-sm md:text-2xl font-black text-emerald-800">
-              ০% দালালি
+              ০% দالاলি
             </div>
             <div className="text-[9px] md:text-xs text-stone-400 font-bold mt-0.5">১০০% ন্যায্য চাষী মূল্য</div>
           </div>
         </section>
+
+        {/* 🔥 Best Selling Slider/Carousel Section */}
+        {bestSellingProducts.length > 0 && (
+          <section className="mb-12">
+            <div className="flex items-center justify-between mb-5 border-b border-stone-200/80 pb-3 gap-4 text-left">
+              <div>
+                <h2 className="text-lg md:text-xl font-serif font-black text-stone-900 flex items-center gap-2">
+                  🔥 সেরা বিক্রিত পণ্য (Best Selling Items)
+                </h2>
+                <p className="text-xs text-stone-400 mt-0.5">সবচেয়ে জনপ্রিয় এবং ক্রেতাদের পছন্দের শীর্ষ অর্গানিক পণ্যসমূহ।</p>
+              </div>
+              <div className="flex gap-1.5 shrink-0">
+                <button 
+                  onClick={() => {
+                    const el = document.getElementById('bestselling-scroll-container');
+                    if (el) el.scrollBy({ left: -240, behavior: 'smooth' });
+                  }}
+                  className="w-8 h-8 rounded-full border border-stone-200 hover:border-emerald-600/30 bg-white hover:bg-stone-50 flex items-center justify-center text-stone-600 transition cursor-pointer select-none"
+                  title="পূর্ববর্তী"
+                >
+                  &larr;
+                </button>
+                <button 
+                  onClick={() => {
+                    const el = document.getElementById('bestselling-scroll-container');
+                    if (el) el.scrollBy({ left: 240, behavior: 'smooth' });
+                  }}
+                  className="w-8 h-8 rounded-full border border-stone-200 hover:border-emerald-600/30 bg-white hover:bg-stone-50 flex items-center justify-center text-stone-600 transition cursor-pointer select-none"
+                  title="পরবর্তী"
+                >
+                  &rarr;
+                </button>
+              </div>
+            </div>
+
+            <div 
+              id="bestselling-scroll-container"
+              className="flex gap-5 overflow-x-auto pb-4 no-scrollbar -mx-4 px-4 scroll-smooth snap-x snap-mandatory"
+            >
+              {bestSellingProducts.map(product => {
+                const farmerObj = (farmers.length > 0 ? farmers : INITIAL_FARMERS).find(f => f.id === product.farmerId || f.name === product.farmer);
+                return (
+                  <div 
+                    key={`best-${product.id}`}
+                    className="w-[180px] md:w-[220px] shrink-0 bg-white rounded-2xl overflow-hidden border border-stone-200/80 shadow-xs hover:shadow-sm hover:border-stone-300 transition-all flex flex-col justify-between snap-start group"
+                  >
+                    <div>
+                      {/* Image container & Badges */}
+                      <div 
+                        className="relative aspect-square overflow-hidden bg-stone-50 border-b border-stone-100 cursor-pointer" 
+                        onClick={() => setSelectedProduct(product)}
+                      >
+                        <img 
+                          src={product.img} 
+                          alt={product.title} 
+                          className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-350"
+                        />
+                        <span className="absolute top-2 left-2 bg-amber-500 text-stone-900 text-[8px] font-bold px-2 py-0.5 rounded-full shadow-xs">
+                          শীর্ষ রেটেড
+                        </span>
+                        <span className="absolute bottom-2 right-2 bg-stone-900/60 backdrop-blur-xs text-white text-[8px] px-2 py-0.5 rounded-md flex items-center gap-0.5">
+                          ⭐️ {product.rating || '5.0'}
+                        </span>
+                      </div>
+
+                      {/* Info body */}
+                      <div className="p-3 space-y-1.5 text-left">
+                        {/* Title of vegetable */}
+                        <h4 
+                          onClick={() => setSelectedProduct(product)}
+                          className="text-[11.5px] font-black text-stone-900 line-clamp-1 hover:text-emerald-800 transition-colors cursor-pointer"
+                        >
+                          {product.title}
+                        </h4>
+                        
+                        {/* Price Details */}
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-xs font-black text-emerald-800">৳{product.price}</span>
+                          <span className="text-[8.5px] text-stone-400 font-bold">/ {product.unit}</span>
+                        </div>
+
+                        {/* Farmer Info */}
+                        {farmerObj && (
+                          <div 
+                            onClick={() => { setSelectedFarmer(farmerObj); }}
+                            className="flex items-center gap-1 cursor-pointer hover:bg-stone-50 p-1 rounded-lg transition-colors border border-transparent hover:border-stone-100 w-fit"
+                          >
+                            <img 
+                              src={getFarmerAvatar(farmerObj)} 
+                              alt={farmerObj.name} 
+                              className="w-3.5 h-3.5 rounded-full object-cover bg-white border border-stone-200" 
+                            />
+                            <span className="text-[9px] text-stone-500 font-semibold line-clamp-1">
+                              {farmerObj.name}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Button actions layout */}
+                    <div className="p-3 pt-0 bg-stone-50/50 border-t border-stone-100/60 font-sans">
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {/* Add to Cart button */}
+                        <button 
+                          onClick={() => {
+                            addToCart(product, 1);
+                            alert(`${product.title} কার্টে যোগ হয়েছে!`);
+                          }}
+                          className="w-full bg-stone-100 hover:bg-stone-200 text-stone-850 font-black py-2 rounded-xl text-[9px] transition-all flex items-center justify-center gap-0.5 cursor-pointer border border-stone-200/50"
+                        >
+                          <ShoppingCart size={10} className="text-stone-500" />
+                          <span>কার্টে দিন</span>
+                        </button>
+
+                        {/* Direct Order button */}
+                        <button 
+                          onClick={() => {
+                            const exists = cart.some(item => item.id === product.id);
+                            if (!exists) {
+                              addToCart(product, 1);
+                            }
+                            setIsOrderModalOpen(true);
+                          }}
+                          className="w-full py-2 rounded-xl text-[9px] font-black transition-all flex items-center justify-center gap-0.5 cursor-pointer bg-emerald-800 hover:bg-emerald-900 text-white shadow-xs"
+                        >
+                          <CheckCheck size={10} />
+                          <span>কিনুন</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Category selector row chips with mini icons */}
         <section id="categories-section" className="mb-10">
@@ -3131,6 +3339,134 @@ function cleanFirestoreData(data: any): any {
               <p className="text-stone-400 text-xs mt-2 leading-relaxed">
                 আপনার বাছাইকৃত ফিল্টার বা কী-ওয়ার্ডে কোনো পণ্য মেলেনি। দয়া করে অন্য কোনো নামে সার্চ করুন।
               </p>
+            </div>
+          ) : activeCategory === 'ready-to-cook' ? (
+            <div className="space-y-12 animate-fade-in w-full">
+              <div className="bg-emerald-50 rounded-3xl p-6 md:p-8 border border-emerald-100 flex flex-col md:flex-row items-center justify-between gap-6 text-left">
+                <div className="space-y-2">
+                  <span className="text-[10px] bg-emerald-800 text-white font-black px-3 py-1 rounded-full uppercase tracking-wider">Premium Service</span>
+                  <h3 className="text-xl md:text-2xl font-serif font-black text-emerald-950">🍳 কৃষক বাজার রেডি-টু-কুক প্রিমিয়াম কর্নার</h3>
+                  <p className="text-xs md:text-sm text-stone-600 max-w-xl leading-relaxed">
+                    মাঠ থেকে সরাসরি বাছাইকৃত তাজা উপকরণের সমন্বয়ে তৈরি আমাদের রেডি-টু-কুক প্যাক। ধোয়া, কাটা ও পরিষ্কার করা রয়েছে, সাথে থাকছে বাবুর্চি স্পেশাল ঘরোয়া মশলার নিখুঁত মিশ্রণ। জাস্ট প্যানে ঢেলে দিন আর তৈরি করুন দারুণ সুস্বাদু আহার!
+                  </p>
+                </div>
+                <img 
+                  src="https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&q=80&w=300" 
+                  alt="Ready to cook container" 
+                  className="w-24 h-24 md:w-32 md:h-32 object-cover rounded-2xl shadow-md border-4 border-white shrink-0"
+                />
+              </div>
+
+              {/* Grid of 5 distinct Ready to Cook sections */}
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+                {filteredProducts.map((product, index) => {
+                  const sectionNames = [
+                    "১. সবজি কড়াই (Veg Ready-to-Cook)",
+                    "২. সবজি + মিট মিক্স (Veg & Meat)",
+                    "৩. ফিশ মিক্স (Fish Mix Combo)",
+                    "৪. মিট মিক্স (Lamb & Goat Meat)",
+                    "৫. অল-ইন-ওয়ান (Everything Mixed)"
+                  ];
+                  const sectionColors = [
+                    "bg-lime-50 text-lime-900 border-lime-200/60",
+                    "bg-orange-50 text-orange-900 border-orange-200/60",
+                    "bg-sky-50 text-sky-900 border-sky-200/60",
+                    "bg-amber-50 text-amber-900 border-amber-200/60",
+                    "bg-rose-50 text-rose-900 border-rose-200/60"
+                  ];
+                  const farmerObj = (farmers.length > 0 ? farmers : INITIAL_FARMERS).find(f => f.id === product.farmerId || f.name === product.farmer);
+                  return (
+                    <div 
+                      key={product.id} 
+                      className="bg-white rounded-2xl overflow-hidden border border-stone-200 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group h-full cursor-pointer relative"
+                      onClick={() => setSelectedProduct(product)}
+                    >
+                      {/* Section Header identifier */}
+                      <div className={`text-[10px] font-black text-center py-2 px-3 border-b uppercase ${sectionColors[index % 5]}`}>
+                        {sectionNames[index % 5] || "রেডি-টু-কুক"}
+                      </div>
+
+                      <div className="p-0">
+                        {/* Image */}
+                        <div className="relative aspect-square overflow-hidden bg-stone-50 border-b border-stone-100">
+                          <img 
+                            src={product.img} 
+                            alt={product.title} 
+                            className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-350"
+                          />
+                          <span className="absolute bottom-2 right-2 bg-stone-900/70 text-white text-[8px] px-2 py-0.5 rounded-md">
+                            ⭐️ {product.rating || '4.9'}
+                          </span>
+                        </div>
+
+                        {/* Details */}
+                        <div className="p-3.5 space-y-2 text-left">
+                          <h4 className="text-[11.5px] font-black text-stone-900 line-clamp-2 leading-snug">
+                            {product.title}
+                          </h4>
+                          
+                          <div className="text-[11px] font-black text-emerald-950">
+                            ৳{product.price} <span className="text-[8.5px] text-stone-400 font-normal">/ {product.unit}</span>
+                          </div>
+
+                          {farmerObj && (
+                            <div className="flex items-center gap-1">
+                              <img 
+                                src={getFarmerAvatar(farmerObj)} 
+                                alt={farmerObj.name} 
+                                className="w-3.5 h-3.5 rounded-full object-cover border border-stone-200" 
+                              />
+                              <span className="text-[9.5px] text-stone-400 font-semibold">{farmerObj.name}</span>
+                            </div>
+                          )}
+                          
+                          {/* Specifications lists */}
+                          {product.specs && product.specs.length > 0 && (
+                            <div className="pt-2 border-t border-stone-100 flex flex-col gap-1.5">
+                              {product.specs.map((spec, sIdx) => (
+                                <div key={sIdx} className="text-[9.5px] text-stone-500 font-bold flex items-center gap-1 leading-tight">
+                                  <span className="text-emerald-600">✓</span>
+                                  <span>{spec}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* CTA Panel */}
+                      <div className="p-3 pt-0 bg-stone-50/50 border-t border-stone-100/60 font-sans" onClick={(e) => e.stopPropagation()}>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button 
+                            onClick={() => {
+                              addToCart(product, 1);
+                              alert(`${product.title} কার্টে যোগ হয়েছে!`);
+                            }}
+                            className="w-full bg-white hover:bg-stone-100 text-stone-850 font-black py-2 rounded-xl text-[9px] transition-all flex items-center justify-center gap-0.5 cursor-pointer border border-stone-200/50 shadow-2xs"
+                          >
+                            <ShoppingCart size={10} className="text-stone-500" />
+                            <span>কার্টে</span>
+                          </button>
+
+                          <button 
+                            onClick={() => {
+                              const exists = cart.some(item => item.id === product.id);
+                              if (!exists) {
+                                addToCart(product, 1);
+                              }
+                              setIsOrderModalOpen(true);
+                            }}
+                            className="w-full py-2 rounded-xl text-[9px] font-black transition-all flex items-center justify-center gap-0.5 cursor-pointer bg-emerald-800 hover:bg-emerald-900 text-white shadow-xs"
+                          >
+                            <CheckCheck size={10} />
+                            <span>কিনুন</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -3208,6 +3544,27 @@ function cleanFirestoreData(data: any): any {
                             <span className="text-[10px] text-stone-500 font-semibold line-clamp-1">
                               {farmerObj.name}
                             </span>
+                          </div>
+                        )}
+
+                        {/* Compact Stats Row */}
+                        {(product.stock !== undefined || product.harvestDate || product.deliveryDate) && (
+                          <div className="flex flex-wrap gap-1 pt-1 border-t border-dashed border-stone-100">
+                            {product.stock !== undefined && (
+                              <span className="text-[8px] bg-emerald-50 text-emerald-800 px-1 py-0.5 rounded-sm font-semibold select-none">
+                                স্টক: {product.stock} {product.unit}
+                              </span>
+                            )}
+                            {product.harvestDate && (
+                              <span className="text-[8px] bg-stone-100 text-stone-600 px-1 py-0.5 rounded-sm font-semibold select-none">
+                                তোলা: {product.harvestDate}
+                              </span>
+                            )}
+                            {product.deliveryDate && (
+                              <span className="text-[8px] bg-amber-50 text-amber-800 px-1 py-0.5 rounded-sm font-semibold select-none">
+                                ডেলিভারি: {product.deliveryDate}
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>
@@ -3893,6 +4250,72 @@ function cleanFirestoreData(data: any): any {
                 <CheckCircle size={14} />
                 <span>সরাসরি ডেলিভারি</span>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 🎥 WHY USE THIS APP? (আমাদের অ্যাপ কেন ব্যবহার করবেন?) SECTION */}
+        <section id="why-use-app-section" className="mb-12 bg-stone-100/60 rounded-[32px] p-6 md:p-10 border border-stone-200 text-left">
+          <div className="max-w-7xl mx-auto space-y-8">
+            <div className="text-center space-y-2 select-none">
+              <span className="text-3xl block">🌾</span>
+              <h2 className="text-xl md:text-3xl font-serif font-black text-emerald-950">আমাদের অ্যাপ কেন ব্যবহার করবেন?</h2>
+              <p className="text-stone-500 text-xs md:text-sm font-sans font-medium">দালালদের শোষণ মুক্ত সুখী সমাজ গঠনে এবং সতেজ খাদ্যপণ্য পেতে কৃষক বাজারের গুরুত্ব দেখুন</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              
+              {/* Card 1 */}
+              <div className="bg-white rounded-2xl overflow-hidden border border-stone-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+                <div className="aspect-video bg-stone-900 relative">
+                  <iframe 
+                    className="w-full h-full"
+                    src={getVideoEmbedUrl('5RE2Gx6643U')} 
+                    title="শতভাগ সতেজ সংগ্রহ"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  ></iframe>
+                </div>
+                <div className="p-4 space-y-1.5 text-left">
+                  <h4 className="font-serif font-black text-xs text-stone-900 leading-tight">১. সরাসরি মাঠের সতেজ আহার</h4>
+                  <p className="text-[10px] text-stone-500 font-medium leading-relaxed">মাঠ থেকে সরাসরি আমাদের প্রতিনিধি দ্বারা কোনো ভেজাল ছাড়াই ক্রেতার রান্নাঘরে মাটির খাঁটি স্বাদ পৌঁছে দেয়া হয়।</p>
+                </div>
+              </div>
+
+              {/* Card 2 */}
+              <div className="bg-white rounded-2xl overflow-hidden border border-stone-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+                <div className="aspect-video bg-stone-900 relative">
+                  <iframe 
+                    className="w-full h-full"
+                    src={getVideoEmbedUrl('d-lmVLO9I-M')} 
+                    title="কৃষকদের ন্যায্যমূল্য"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  ></iframe>
+                </div>
+                <div className="p-4 space-y-1.5 text-left">
+                  <h4 className="font-serif font-black text-xs text-stone-900 leading-tight font-sans">২. মধ্যস্বত্বভোগী বা দালালের শোষণ মুক্তি</h4>
+                  <p className="text-[10px] text-stone-500 font-medium leading-relaxed">শত শত বছর ধরে চলে আসা আড়তদারি শোষণ দূর করে কষ্টার্জিত ফসলের শতভাগ মুনাফা সরাসরি কৃষকের ব্যাংকে পৌঁছে দেওয়া হয়।</p>
+                </div>
+              </div>
+
+              {/* Card 3 */}
+              <div className="bg-white rounded-2xl overflow-hidden border border-stone-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
+                <div className="aspect-video bg-stone-900 relative">
+                  <iframe 
+                    className="w-full h-full"
+                    src={getVideoEmbedUrl('NRveNHaYbVU')} 
+                    title="সাশ্রয়ী বাজার সুবিধা"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  ></iframe>
+                </div>
+                <div className="p-4 space-y-1.5 text-left">
+                  <h4 className="font-serif font-black text-xs text-stone-900 leading-tight font-sans">৩. সাশ্রয়ী ফ্যামিলি বাস্কেট</h4>
+                  <p className="text-[10px] text-stone-500 font-medium leading-relaxed font-sans">অনাবশ্যক বাড়তি ডেলিভারি বা প্যাকিং চার্জ ছাড়াই সপ্তাহের সব বাজার একসাথে ঘরে নেওয়ার সুবিধা দিয়ে সময় ও অর্থ সাশ্রয় করুন।</p>
+                </div>
+              </div>
+
             </div>
           </div>
         </section>
@@ -4739,6 +5162,40 @@ function cleanFirestoreData(data: any): any {
                     className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl outline-none text-xs text-stone-850 focus:ring-1 focus:ring-emerald-700 font-sans font-semibold leading-relaxed"
                     placeholder="পণ্যের গুণাগুণ ও বিস্তারিত বর্ণনা দিন..."
                   />
+                </div>
+
+                {/* Stock, Harvest Date, Delivery Date fields in Admin Dashboard Edit Modal */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-stone-500 uppercase">মজুদ স্টক (Stock)</label>
+                    <input 
+                      type="number"
+                      value={editingProduct.stock !== undefined ? editingProduct.stock : 100}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, stock: parseInt(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl outline-none text-xs text-stone-850 focus:ring-1 focus:ring-emerald-700 font-sans font-semibold font-mono"
+                      placeholder="যেমন: ১০০"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-stone-500 uppercase">ফসল তোলার তারিখ</label>
+                    <input 
+                      type="text"
+                      value={editingProduct.harvestDate || ''}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, harvestDate: e.target.value })}
+                      className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl outline-none text-xs text-stone-850 focus:ring-1 focus:ring-emerald-700 font-sans font-semibold"
+                      placeholder="যেমন: ১৫ জুন"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-stone-500 uppercase">ডেলিভারি তারিখ</label>
+                    <input 
+                      type="text"
+                      value={editingProduct.deliveryDate || ''}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, deliveryDate: e.target.value })}
+                      className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl outline-none text-xs text-stone-850 focus:ring-1 focus:ring-emerald-700 font-sans font-semibold"
+                      placeholder="যেমন: ১৮ জুন"
+                    />
+                  </div>
                 </div>
 
                 {/* Best Seller / Highlighting Option */}
@@ -6820,7 +7277,7 @@ function cleanFirestoreData(data: any): any {
                             <li>• <strong>আনলিমিটেড</strong> ফ্রি ডেলিভারি</li>
                             <li>• কাটা সবজি + ম্যারিনেট মাংস</li>
                             <li>• সপ্তাহে ডাইরেক্ট খামার ভিডিও</li>
-                            <li>• কাস্টম অর্ডার সুবিধা</li>
+                            <li>• রেডি টু কুক সুবিধা</li>
                           </ul>
                         </div>
                         <button 
@@ -6940,6 +7397,161 @@ function cleanFirestoreData(data: any): any {
         </div>
       )}
     </AnimatePresence>
+
+    {/* 🔔 LIVE REAL-TIME ORDER NOTIFICATION SYSTEM TOAST */}
+    <AnimatePresence>
+      {newOrderAlert && (
+        <motion.div 
+          initial={{ opacity: 0, y: -40, scale: 0.9 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -20, scale: 0.95 }}
+          className="fixed top-24 left-4 right-4 md:left-auto md:right-6 md:w-96 bg-stone-950/95 backdrop-blur-md text-white rounded-3xl p-5 border border-stone-800 shadow-2xl z-[150] space-y-3.5 text-left font-sans animate-none"
+        >
+          <div className="flex justify-between items-start">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🔔</span>
+              <div>
+                <h4 className="font-extrabold text-sm text-emerald-400">লাইভ অর্ডার নোটিফিকেশন</h4>
+                <span className="text-[9px] font-bold text-stone-400 tracking-wider uppercase font-mono">ORDER ID: #{newOrderAlert.id}</span>
+              </div>
+            </div>
+            <button 
+              onClick={() => {
+                setNewOrderAlert(null);
+                setNewOrdersBadgeCount(0);
+              }} 
+              className="text-stone-400 hover:text-white p-1 rounded-full hover:bg-white/10"
+            >
+              <X size={15} />
+            </button>
+          </div>
+
+          <div className="text-[11.5px] leading-relaxed text-stone-300">
+            {/* Context alerts based on logged in user types */}
+            {String(currentView) === 'admin' ? (
+              <div className="space-y-1.5 p-3 bg-red-950/40 border border-red-500/20 rounded-2xl">
+                <span className="font-bold text-red-400 block text-[10px] uppercase">👑 এডমিন প্যানেল এলার্ট</span>
+                <p>সম্মানিত এডমিন, গ্রাহক <strong>{newOrderAlert.customerName}</strong> একটি নতুন সফল ক্যাশ-অন-ডেলিভারি অর্ডার সাবমিট করেছেন!</p>
+                <p className="text-[10px] text-stone-400">মোট মূল্য: ৳{newOrderAlert.totalAmount || newOrderAlert.price} | ফোন: {newOrderAlert.customerPhone}</p>
+              </div>
+            ) : (isLoggedInFarmer && loggedInFarmer && newOrderAlert.items?.some(item => String(item.farmerId) === String(loggedInFarmer.id) || item.farmer === loggedInFarmer.name)) ? (
+              <div className="space-y-1.5 p-3 bg-emerald-950/40 border border-emerald-500/20 rounded-2xl">
+                <span className="font-bold text-emerald-400 block text-[10px] uppercase">🌾 কৃষক ড্যাশবোর্ড এলার্ট</span>
+                <p>অভিনন্দন <strong>{loggedInFarmer.name}</strong>! আপনার খামারের উৎপাদিত পণ্য সামগ্রীর জন্য একটি নতুন অর্ডার এসেছে!</p>
+                <p className="text-[10px] text-stone-400">অনুগ্রহ করে চাষী পোর্টাল খুলে আপনার ডেলিভারি প্রোডাক্ট স্ট্যাটাস ভেরিফাই করুন।</p>
+              </div>
+            ) : (
+              <div className="space-y-1 p-3 bg-stone-900/60 border border-stone-800 rounded-2xl text-stone-300 font-sans">
+                <span>গ্রাহক <strong>{newOrderAlert.customerName?.slice(0, 1) + '***' + newOrderAlert.customerName?.slice(-1)}</strong> সরাসরি প্রান্তিক কৃষক থেকে <strong>{newOrderAlert.items?.[0]?.title || 'পণ্য'}</strong> অর্ডার করেছেন!</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2 shrink-0 select-none pt-1">
+            <button
+              onClick={() => {
+                if (String(currentView) === 'admin') {
+                  setCurrentPage('home');
+                } else if (isLoggedInFarmer) {
+                  setIsFarmerLoginOpen(true);
+                } else {
+                  setCurrentPage('customer-dashboard');
+                  setIsCustomerDashboardOpen(true);
+                }
+                setNewOrderAlert(null);
+              }}
+              className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2 rounded-xl text-xs text-center transition cursor-pointer"
+            >
+              বিস্তারিত দেখুন ➔
+            </button>
+            <button
+              onClick={() => {
+                setNewOrderAlert(null);
+                setNewOrdersBadgeCount(0);
+              }}
+              className="px-3 bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold py-2 rounded-xl text-xs text-center transition cursor-pointer"
+            >
+              বন্ধ করুন
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+    {/* 📍 FIXED BOTTOM NAVIGATION BAR FOR MOBILE */}
+    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] z-50 px-2 py-1.5 flex justify-around items-center select-none shrink-0 font-sans">
+      {/* Home Button */}
+      <button 
+        onClick={() => {
+          setCurrentPage('home');
+          setActiveCategory('all');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        className={`flex flex-col items-center gap-1 cursor-pointer transition-colors w-16 ${(currentPage === 'home' && activeCategory === 'all') ? 'text-emerald-850 font-bold' : 'text-stone-500 hover:text-emerald-700'}`}
+      >
+        <span className="text-lg leading-none">🏡</span>
+        <span className="text-[9px] tracking-tight leading-none font-semibold">হোম</span>
+      </button>
+
+      {/* Categories Button */}
+      <button 
+        onClick={() => {
+          setCurrentPage('home');
+          const element = document.getElementById('categories-section');
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }}
+        className={`flex flex-col items-center gap-1 cursor-pointer transition-colors w-16 ${(currentPage === 'home' && activeCategory !== 'all') ? 'text-emerald-850 font-bold' : 'text-stone-500 hover:text-emerald-700'}`}
+      >
+        <span className="text-lg leading-none">🔖</span>
+        <span className="text-[9px] tracking-tight leading-none font-semibold">ক্যাটাগরি</span>
+      </button>
+
+      {/* Cart Button */}
+      <button 
+        onClick={() => setIsCartOpen(true)}
+        className="flex flex-col items-center gap-1 cursor-pointer transition-colors w-16 text-stone-500 hover:text-emerald-700 relative"
+      >
+        <span className="text-lg leading-none">🛒</span>
+        <span className="text-[9px] tracking-tight leading-none font-semibold font-sans">কার্ট</span>
+        {cart.length > 0 && (
+          <span className="absolute top-0.5 right-3 bg-amber-500 text-white text-[8px] w-4 h-4 flex items-center justify-center rounded-full font-bold border border-white">
+            {cart.reduce((sum, item) => sum + item.quantity, 0)}
+          </span>
+        )}
+      </button>
+
+      {/* Orders Button */}
+      <button 
+        onClick={() => {
+          setCurrentPage('customer-dashboard');
+          setIsCustomerDashboardOpen(true);
+        }}
+        className={`flex flex-col items-center gap-1 cursor-pointer transition-colors w-16 ${(currentPage === 'customer-dashboard' || isCustomerDashboardOpen) ? 'text-emerald-850 font-bold' : 'text-stone-500 hover:text-emerald-700'}`}
+      >
+        <span className="text-lg leading-none">📦</span>
+        <span className="text-[9px] tracking-tight leading-none font-semibold">অর্ডার</span>
+      </button>
+
+      {/* Account Button */}
+      <button 
+        onClick={() => {
+          if (isLoggedInFarmer) {
+            setIsFarmerLoginOpen(true);
+          } else {
+            setCurrentPage('customer-dashboard');
+            setIsCustomerDashboardOpen(true);
+          }
+        }}
+        className={`flex flex-col items-center gap-1 cursor-pointer transition-colors w-16 ${(isLoggedInFarmer && isFarmerLoginOpen) || (customerUser && isCustomerDashboardOpen) ? 'text-emerald-850 font-bold' : 'text-stone-500 hover:text-emerald-700'}`}
+      >
+        <span className="text-lg leading-none">👤</span>
+        <span className="text-[9px] tracking-tight leading-none font-semibold">
+          {isLoggedInFarmer ? 'চাষী' : (customerUser ? 'গ্রাহক' : 'অ্যাকাউন্ট')}
+        </span>
+      </button>
+    </div>
 
   </div>
   );
@@ -7187,6 +7799,9 @@ function ProductDetailsSheet({
   const [editWeightOptions, setEditWeightOptions] = useState(product.weightOptions ? product.weightOptions.join(', ') : '');
   const [editAvailableSoon, setEditAvailableSoon] = useState(!!product.availableSoon);
   const [editSpecs, setEditSpecs] = useState(product.specs ? product.specs.join(', ') : '');
+  const [editStock, setEditStock] = useState(product.stock !== undefined ? product.stock : 100);
+  const [editHarvestDate, setEditHarvestDate] = useState(product.harvestDate || '');
+  const [editDeliveryDate, setEditDeliveryDate] = useState(product.deliveryDate || '');
 
   // Keep state synced if active product item changes
   useEffect(() => {
@@ -7204,6 +7819,9 @@ function ProductDetailsSheet({
     setEditWeightOptions(product.weightOptions ? product.weightOptions.join(', ') : '');
     setEditAvailableSoon(!!product.availableSoon);
     setEditSpecs(product.specs ? product.specs.join(', ') : '');
+    setEditStock(product.stock !== undefined ? product.stock : 100);
+    setEditHarvestDate(product.harvestDate || '');
+    setEditDeliveryDate(product.deliveryDate || '');
   }, [product]);
 
   // Generate 4 dynamic gallery options if gallery string array is null
@@ -7500,6 +8118,40 @@ function ProductDetailsSheet({
                 />
               </div>
 
+              {/* Stock, Harvest date, Delivery date Edit Inputs */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-stone-500 uppercase">মজুদ স্টক (Stock)</label>
+                  <input 
+                    type="number"
+                    value={editStock}
+                    onChange={e => setEditStock(parseInt(e.target.value) || 0)}
+                    placeholder="উদা: ১০০"
+                    className="w-full px-3 py-2 bg-stone-50 border rounded-xl outline-none text-[11px] text-stone-800 font-mono font-bold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-stone-500 uppercase font-sans">ফসল তোলার তারিখ</label>
+                  <input 
+                    type="text"
+                    value={editHarvestDate}
+                    onChange={e => setEditHarvestDate(e.target.value)}
+                    placeholder="উদা: ১৫ জুন"
+                    className="w-full px-3 py-2 bg-stone-50 border rounded-xl outline-none text-[11px] text-stone-800 font-sans font-bold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-stone-500 uppercase font-sans">ডেলিভারি তারিখ</label>
+                  <input 
+                    type="text"
+                    value={editDeliveryDate}
+                    onChange={e => setEditDeliveryDate(e.target.value)}
+                    placeholder="উদা: ১৮ জুন"
+                    className="w-full px-3 py-2 bg-stone-50 border rounded-xl outline-none text-[11px] text-stone-800 font-sans font-bold"
+                  />
+                </div>
+              </div>
+
               <div className="flex items-center gap-2 bg-amber-50/50 p-3 rounded-xl border border-amber-100 select-none">
                 <input 
                   type="checkbox" 
@@ -7566,7 +8218,10 @@ function ProductDetailsSheet({
                         gallery: fullGallery.length > 0 ? fullGallery : [primaryImg],
                         weightOptions: wOptArr.length > 0 ? wOptArr : undefined,
                         availableSoon: editAvailableSoon,
-                        specs: specsArr.length > 0 ? specsArr : undefined
+                        specs: specsArr.length > 0 ? specsArr : undefined,
+                        stock: editStock,
+                        harvestDate: editHarvestDate,
+                        deliveryDate: editDeliveryDate
                       });
                       alert('পণ্যটি সফলভাবে পরিবর্তন করা হয়েছে!');
                     }
@@ -7685,6 +8340,30 @@ function ProductDetailsSheet({
                       <span className="text-[10px] text-stone-405 font-bold">মোট ইউনিট: {(quantity * 1).toLocaleString('bn-BD')} {product.unit}</span>
                     </div>
                   </div>
+
+                  {/* Stock, Harvest date, Delivery date info row */}
+                  {(product.stock !== undefined || product.harvestDate || product.deliveryDate) && (
+                    <div className="grid grid-cols-3 gap-2 bg-stone-50 border border-stone-200/60 p-2.5 rounded-xl text-center select-none">
+                      <div className="space-y-0.5">
+                        <span className="text-[9px] text-stone-400 font-extrabold uppercase tracking-wider block">মজুদ (Stock)</span>
+                        <span className="text-[10px] font-black text-emerald-800">
+                          {product.stock !== undefined ? `${product.stock} ${product.unit}` : 'পর্যাপ্ত'}
+                        </span>
+                      </div>
+                      <div className="border-l border-stone-150 space-y-0.5">
+                        <span className="text-[9px] text-stone-400 font-extrabold uppercase tracking-wider block">ফসল তোলার তারিখ</span>
+                        <span className="text-[10px] font-black text-stone-700">
+                          {product.harvestDate || 'সদ্য তোলা'}
+                        </span>
+                      </div>
+                      <div className="border-l border-stone-150 space-y-0.5">
+                        <span className="text-[9px] text-stone-400 font-extrabold uppercase tracking-wider block">ডেলিভারি সময়</span>
+                        <span className="text-[10px] font-black text-stone-700">
+                          {product.deliveryDate || '২৪-৪৮ ঘণ্টা'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
                   {product.availableSoon && (
                     <div className="bg-indigo-50 border border-indigo-200/60 p-3 rounded-xl flex items-start gap-2 text-left select-none">
@@ -8375,4 +9054,28 @@ function SectionHeader({ title, count }: { title: string; count?: number }) {
       )}
     </div>
   );
+}
+
+// Merge Firestore products with static default ones so customized configurations don't replace unmodified objects
+export function mergeDbAndInitialProducts(dbList: Product[]): Product[] {
+  if (!dbList || dbList.length === 0) {
+    return [...INITIAL_PRODUCTS].sort((a, b) => b.id - a.id);
+  }
+  
+  const dbMap = new Map<number, Product>();
+  dbList.forEach(p => dbMap.set(p.id, p));
+
+  const mergedList = INITIAL_PRODUCTS.map(ip => {
+    if (dbMap.has(ip.id)) {
+      const dbProd = dbMap.get(ip.id)!;
+      dbMap.delete(ip.id);
+      return dbProd;
+    }
+    return ip;
+  });
+
+  const newItems = Array.from(dbMap.values());
+
+  return [...mergedList, ...newItems]
+    .sort((a, b) => b.id - a.id);
 }

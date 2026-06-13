@@ -364,6 +364,80 @@ const RAW_PRODUCTS_METADATA = [
   ]}
 ];
 
+// Add ready-to-cook products directly to standard meta
+export const READY_TO_COOK_METADATA = [
+  {
+    title: 'ভেজিটেবল মিক্স রেডি-টু-কুক (Vegetable Ready-to-Cook)',
+    slug: 'vegetable-ready-cook',
+    price: 499,
+    unit: '১ বাস্কেট',
+    farmerId: 1,
+    best: true,
+    stock: 45,
+    img: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&q=80&w=400',
+    gallery: [
+      'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&q=80&w=600'
+    ],
+    specs: ['বানানোর সময় কমায়', '১০০% তাজা সবজি', 'ধুয়ে কাটা ও পরিষ্কার করা']
+  },
+  {
+    title: 'ভেজিটেবল প্লাস মিট মিক্স রেডি-টু-কুক (Vegetable & Meat Ready-to-Cook)',
+    slug: 'vegetable-plus-meat',
+    price: 999,
+    unit: '১ বাস্কেট',
+    farmerId: 2,
+    best: true,
+    stock: 35,
+    img: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&q=80&w=400',
+    gallery: [
+      'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&q=80&w=600'
+    ],
+    specs: ['দেশি চিকেন স্লাইস', 'মশলাপাতি সহ প্রস্তুত', 'হাইজিন গ্রেড কাটিং']
+  },
+  {
+    title: 'ফিশ মিক্স রেডি-টু-কুক (Fish Mix Ready-to-Cook)',
+    slug: 'fish-mix-ready-cook',
+    price: 1499,
+    unit: '১ বাস্কেট',
+    farmerId: 6,
+    best: true,
+    stock: 25,
+    img: 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&q=80&w=400',
+    gallery: [
+      'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&q=80&w=600'
+    ],
+    specs: ['নদীয়া চিংড়ি ও পাবদা', 'সম্পূর্ণ আঁশ ও কাঁটা কাটা', 'মশলার নিখুঁত কম্বো']
+  },
+  {
+    title: 'খাসি ও ভেড়ার মাংসের মিক্স রেডি-টু-কুক (Lamb & Goat Meat Mix)',
+    slug: 'lamb-goat-ready-cook',
+    price: 1999,
+    unit: '১ বাস্কেট',
+    farmerId: 13,
+    best: true,
+    stock: 20,
+    img: 'https://images.unsplash.com/photo-1603048588665-791ca8aea617?auto=format&fit=crop&q=80&w=400',
+    gallery: [
+      'https://images.unsplash.com/photo-1603048588665-791ca8aea617?auto=format&fit=crop&q=80&w=600'
+    ],
+    specs: ['প্রিমিয়াম খাসি ও ভেড়া', 'হাড় ছাড়া সলিড মিট', 'বাবুর্চি স্পেশাল গরম মশলা']
+  },
+  {
+    title: 'সব একসাথে অল-ইন-ওয়ান মিক্স রেডি-টু-কুক (All Mixed Together Ready-to-Cook)',
+    slug: 'all-mixed-together-ready-cook',
+    price: 1999,
+    unit: '১ বাস্কেট',
+    farmerId: 15,
+    best: true,
+    stock: 15,
+    img: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&q=80&w=400',
+    gallery: [
+      'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&q=80&w=600'
+    ],
+    specs: ['মাছ, মাংস ও সবজির মহা মিলন', 'মেগা লাইফস্টাইল কম্বো ফ্যামিলি প্যাক', 'সরাসরি ফ্রাই বা কারির জন্য প্রস্তুত']
+  }
+];
+
 // Helper to compile metadata into 150 comprehensive type-safe Product instances
 const generateProducts = (): Product[] => {
   const pList: Product[] = [];
@@ -399,8 +473,151 @@ const generateProducts = (): Product[] => {
         // Generating premium ratings between 4.5 and 5.0
         rating: Number((4.5 + Math.random() * 0.5).toFixed(1)),
         weightOptions: item.weightOptions || ['৫০০ গ্রাম', '১ কেজি', '২ কেজি'],
-        isBestSeller: item.best || false
+        isBestSeller: item.best || false,
+        stock: (item as any).stock || Math.floor(15 + Math.random() * 75)
       });
+    });
+  });
+
+  // Compile ready-to-cook
+  READY_TO_COOK_METADATA.forEach(item => {
+    const farmerObj = INITIAL_FARMERS.find(f => f.id === item.farmerId) || INITIAL_FARMERS[0];
+    const customDescription = `কৃষক বাজার সরাসরি গ্রাহক সম্পর্কের উদাহরণ। এই সুস্বাদু প্রিমিয়াম ${item.title} উৎপাদন করেছেন আমাদের নিবন্ধিত প্রান্তিক দক্ষ কৃষক ${farmerObj.name}। সম্পূর্ণ স্বাস্থ্যসম্মত পদ্ধতিতে সরাসরি মাঠের তাজা শাকসবজি ও মাংসের সমন্বয়ে এই রেডি-টু-কুক বাটি প্রস্তুত। জাস্ট প্যানে ঢেলে দিন আর উপভোগ করুন গরম গরম খাবারের আসল স্বাদ!`;
+
+    pList.push({
+      id: globalId++,
+      title: item.title,
+      slug: item.slug,
+      price: item.price,
+      unit: item.unit,
+      cat: 'ready-to-cook',
+      farmer: farmerObj.name,
+      farmerId: farmerObj.id,
+      img: item.img,
+      gallery: item.gallery,
+      description: customDescription,
+      specs: item.specs,
+      rating: Number((4.7 + Math.random() * 0.3).toFixed(1)), // top rated
+      weightOptions: ['১ বাস্কেট'],
+      isBestSeller: true,
+      stock: item.stock
+    });
+  });
+
+  // 1. Overwrite and correct images for existing products with official Shopify links
+  pList.forEach(p => {
+    if (p.title === 'বেগুন') {
+      const u = 'https://cdn.shopify.com/s/files/1/0991/0717/6761/files/download.jpg?v=1778788778';
+      p.img = u;
+      p.gallery = [u, u, u, u, u];
+    } else if (p.title === 'লাউ') {
+      const u = 'https://cdn.shopify.com/s/files/1/0991/0717/6761/files/download_2.jpg?v=1778788779';
+      p.img = u;
+      p.gallery = [u, u, u, u, u];
+    } else if (p.title === 'পুঁই শাক') {
+      const u = 'https://cdn.shopify.com/s/files/1/0991/0717/6761/files/download.jpg?v=1778788778';
+      p.img = u;
+      p.gallery = [u, u, u, u, u];
+    } else if (p.title === 'জ্যান্ত মাগুর মাছ') {
+      const u = 'https://cdn.shopify.com/s/files/1/0991/0717/6761/files/download_6.jpg?v=1778788778';
+      p.img = u;
+      p.gallery = [u, u, u, u, u];
+    } else if (p.slug === 'magur-fish') {
+      const u = 'https://cdn.shopify.com/s/files/1/0991/0717/6761/files/download_6.jpg?v=1778788778';
+      p.img = u;
+      p.gallery = [u, u, u, u, u];
+    }
+  });
+
+  // 2. Append all new products dynamically below the existing ones as required, each with 5 images in gallery
+  const newProductsList = [
+    {
+      title: 'মিক্স সবজি প্যাক',
+      slug: 'mix-vege-pack',
+      price: 120,
+      unit: 'প্যাক',
+      cat: 'vege',
+      farmer: 'রহিমা বেগম',
+      farmerId: 2,
+      img: 'https://cdn.shopify.com/s/files/1/0991/0717/6761/files/download_7.jpg?v=1778788779',
+      desc: 'তাজা ও গুণগত মানসম্পন্ন কাটা শীতকালীন ৫ রকম সবজির মিক্স প্যাক। জাস্ট রান্না করার জন্য প্রস্তুত।'
+    },
+    {
+      title: 'মুলা শাক',
+      slug: 'mula-shak-fresh',
+      price: 15,
+      unit: 'আটি',
+      cat: 'leafy',
+      farmer: 'খাদিজา আক্তার',
+      farmerId: 17,
+      img: 'https://cdn.shopify.com/s/files/1/0991/0717/6761/files/images_21.jpg?v=1778788778',
+      desc: 'জমির কচি তাজা স্বাস্থ্যকর মুলা শাক। কোনো সার ক্ষতিকারক স্প্রে ছাড়াই অর্গানিক উপায়ে উৎপাদিত।'
+    },
+    {
+      title: 'কাটা পেঁয়াজ প্যাক',
+      slug: 'kata-peyaj-pack',
+      price: 95,
+      unit: 'প্যাক',
+      cat: 'ready-to-cook',
+      farmer: 'দুলাল শেখ',
+      farmerId: 12,
+      img: 'https://cdn.shopify.com/s/files/1/0991/0717/6761/files/images_20.jpg?v=1778788779',
+      desc: 'ধোয়া ও হাইজেনিক উপায়ে নিখুঁতভাবে কাটা দেশি লাল পেঁয়াজের খোসা ছাড়ানো প্যাক। রান্নার ঝামেলা এড়াতে সহায়ক।'
+    },
+    {
+      title: 'কালো মাগুর মাছ',
+      slug: 'black-magur-fish',
+      price: 650,
+      unit: 'কেজি',
+      cat: 'fish',
+      farmer: 'আলमগীর হোসেন',
+      farmerId: 5,
+      img: 'https://cdn.shopify.com/s/files/1/0991/0717/6761/files/download_6.jpg?v=1778788778',
+      desc: 'বিল ও খামারের সম্পূর্ণ তাজা জ্যান্ত কালো কালচে মখমলি জীবন্ত মাগুর মাছ। রক্ত ও শক্তি বৃদ্ধিতে দারুন পুষ্টিকর।'
+    },
+    {
+      title: 'দেশি শিং মাছ',
+      slug: 'native-shing-fish',
+      price: 550,
+      unit: 'কেজি',
+      cat: 'fish',
+      farmer: 'আলमগীর হোসেন',
+      farmerId: 5,
+      img: 'https://cdn.shopify.com/s/files/1/0991/0717/6761/files/images_19.jpg?v=1778788778',
+      desc: 'সুনামগঞ্জের হাওড়ের বিখ্যাত জ্যান্ত দেশি লালচে শিং মাছ। রোগ প্রতিরোধক্ষমতা বৃদ্ধিতে অতুলনীয়।'
+    },
+    {
+      title: 'দেশি লাউ',
+      slug: 'deshi-lau-gourd',
+      price: 55,
+      unit: 'পিস',
+      cat: 'vege',
+      farmer: 'করিম মিয়া',
+      farmerId: 1,
+      img: 'https://cdn.shopify.com/s/files/1/0991/0717/6761/files/download_2.jpg?v=1778788779',
+      desc: 'মাটির ও বাঁশের মাচায় ফলে উঠা কচি ভেজালহীন মিষ্টি পানিময় দেশি তরতাজা লাউ।'
+    }
+  ];
+
+  newProductsList.forEach(np => {
+    const mainImg = np.img;
+    pList.push({
+      id: globalId++,
+      title: np.title,
+      slug: np.slug,
+      price: np.price,
+      unit: np.unit,
+      cat: np.cat as any,
+      farmer: np.farmer,
+      farmerId: np.farmerId,
+      img: np.img,
+      gallery: [mainImg, mainImg, mainImg, mainImg, mainImg],
+      description: np.desc + ' কৃষক বাজার সরাসরি গ্রাহক সম্পর্কের উদাহরণ। কোনো কৃত্রিম রাসায়নিক স্প্রে অথবা কৃত্রিম প্রিজারভেটিভ ব্যবহার ছাড়াই সম্পূর্ণ প্রাকৃতিক উপায়ে উর্বর জৈব সারে এই ফসল ফলানো হয়েছে।',
+      specs: ['শতভাগ তাজা গ্যারান্টি', 'সরাসরি খামারের ফসল'],
+      rating: 4.8,
+      weightOptions: np.unit === 'পিস' ? ['১ পিস'] : ['১ কেজি', '২ কেজি'],
+      isBestSeller: true,
+      stock: 45
     });
   });
 
